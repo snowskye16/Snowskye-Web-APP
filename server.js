@@ -361,6 +361,8 @@ app.get("/api/public/recent", async (req, res) => {
    CHAT (Widget + Contact pages)
 ========================= */
 app.post("/api/chat", chatLimiter, async (req, res) => {
+  const started = Date.now();
+
   try {
     const message = cleanText(req.body?.message, 2000);
     const email = normalizeEmail(req.body?.email);
@@ -370,42 +372,57 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
 
-    // Save lead
-    await supabase.from("leads").insert([
-      {
-        email: isValidEmail(email) ? email : null,
-        message,
-        source,
-        session_id: sessionId || null,
-      },
-    ]);
-
-    let reply = "AI not configured. Set OPENAI_API_KEY.";
-    if (openai) {
-      const ai = await openai.responses.create({
-        model: "gpt-4o-mini",
-        input: businessBrain(message),
-        temperature: 0.7,
-      });
-      reply = ai.output_text || "Sorry, I couldn't generate a reply.";
-    }
-
-    // Booking intent => appointment record
-    if (looksLikeBookingIntent(message)) {
-      await supabase.from("appointments").insert([
+    // 1) Try saving lead, but NEVER block the reply if DB fails
+    try {
+      await supabase.from("leads").insert([
         {
           email: isValidEmail(email) ? email : null,
           message,
-          status: "pending",
+          source,
+          session_id: sessionId || null,
         },
       ]);
+    } catch (dbErr) {
+      console.error("leads insert failed:", dbErr?.message || dbErr);
+    }
+
+    // 2) AI reply (still works even if DB insert failed)
+    let reply = "AI not configured. Set OPENAI_API_KEY.";
+
+    if (openai) {
+      try {
+        const ai = await openai.responses.create({
+          model: "gpt-4o-mini",
+          input: businessBrain(message),
+          temperature: 0.7,
+        });
+        reply = ai.output_text || "Sorry, I couldn't generate a reply.";
+      } catch (aiErr) {
+        console.error("openai error:", aiErr?.message || aiErr);
+        reply = "Assistant temporarily unavailable. Please try again in a moment.";
+      }
+    }
+
+    // 3) Booking intent => also try saving appointment, but don’t block reply
+    if (looksLikeBookingIntent(message)) {
+      try {
+        await supabase.from("appointments").insert([
+          {
+            email: isValidEmail(email) ? email : null,
+            message,
+            status: "pending",
+          },
+        ]);
+      } catch (dbErr) {
+        console.error("appointments insert failed:", dbErr?.message || dbErr);
+      }
 
       reply += "\n\n📅 To book: send your name + email + preferred date/time + timezone.";
     }
 
-    res.json({ ok: true, reply });
+    res.json({ ok: true, reply, ms: Date.now() - started });
   } catch (e) {
-    console.error("chat error:", e);
+    console.error("chat route error:", e);
     res.status(500).json({ ok: false, reply: "Assistant temporarily unavailable." });
   }
 });
@@ -455,12 +472,12 @@ app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
 
 // ✅ Only fallback for pages (NOT files)
 app.get("*", (req, res) => {
-  // if request looks like a file, return 404
-  if (req.path.includes("."))
-    return res.status(404).send("Not found");
-
+  // if request looks like a file, return 404 (so /widget.js works correctly)
+  if (req.path.includes(".")) return res.status(404).send("Not found");
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
+
+/* =========================
    START
 ========================= */
 app.listen(PORT, () => {
