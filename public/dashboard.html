@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SnowSkye Dashboard</title>
+
+  <style>
+    :root{
+      --bg0:#020617;
+      --bg1:#0b1222;
+      --card:#0f172a;
+      --card2:#111c33;
+      --line:rgba(56,189,248,.18);
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --brand:#38bdf8;
+      --good:#22c55e;
+      --warn:#fbbf24;
+      --bad:#ef4444;
+      --shadow: 0 18px 60px rgba(0,0,0,.45);
+      --radius: 16px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color:var(--text);
+      background:
+        radial-gradient(1200px 800px at 10% 10%, rgba(56,189,248,.18), transparent 55%),
+        radial-gradient(900px 700px at 90% 30%, rgba(99,102,241,.16), transparent 55%),
+        linear-gradient(135deg, var(--bg0), var(--bg1));
+      min-height:100vh;
+    }
+
+    a{color:inherit}
+    .app{
+      display:grid;
+      grid-template-columns: 280px 1fr;
+      min-height:100vh;
+    }
+
+    /* Sidebar */
+    .sidebar{
+      padding:22px 18px;
+      border-right: 1px solid rgba(255,255,255,.06);
+      background: rgba(2,6,23,.55);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top:0;
+      height:100vh;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      margin-bottom:14px;
+    }
+    .logo{
+      width:38px;height:38px;border-radius:12px;
+      background: linear-gradient(135deg, rgba(56,189,248,1), rgba(99,102,241,1));
+      box-shadow: 0 10px 30px rgba(56,189,248,.25);
+    }
+    .brand h1{
+      font-size:16px;
+      margin:0;
+      line-height:1.1;
+    }
+    .brand p{
+      margin:0;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .nav{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-top:14px;
+    }
+    .nav button{
+      width:100%;
+      border:1px solid rgba(255,255,255,.06);
+      background: rgba(15,23,42,.55);
+      color:var(--text);
+      padding:12px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      transition:.2s ease;
+    }
+    .nav button:hover{ transform: translateY(-1px); border-color: var(--line); }
+    .nav button.active{
+      border-color: rgba(56,189,248,.55);
+      background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .nav .icon{
+      width:34px;height:34px;border-radius:12px;
+      background: rgba(56,189,248,.10);
+      display:grid;place-items:center;
+      border:1px solid rgba(56,189,248,.22);
+    }
+    .nav .meta{
+      text-align:left;
+      flex:1;
+    }
+    .nav .meta .t{ font-weight:650; font-size:13px; }
+    .nav .meta .d{ color:var(--muted); font-size:11px; margin-top:2px; }
+
+    .sideFooter{
+      position:absolute;
+      bottom:18px;
+      left:18px;
+      right:18px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      padding-top:14px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:999px;
+      background: rgba(15,23,42,.5);
+    }
+    .dot{
+      width:8px;height:8px;border-radius:50%;
+      background: var(--good);
+      box-shadow: 0 0 0 4px rgba(34,197,94,.12);
+    }
+
+    /* Main */
+    .main{
+      padding:26px 26px 40px;
+    }
+
+    .topbar{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      margin-bottom:16px;
+    }
+    .titleBlock h2{
+      margin:0;
+      font-size:20px;
+      letter-spacing:.2px;
+    }
+    .titleBlock p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:12.5px;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .input{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(15,23,42,.55);
+      min-width: 260px;
+    }
+    .input input{
+      border:none; outline:none;
+      background: transparent;
+      color: var(--text);
+      width:100%;
+      font-size:13px;
+    }
+    .btn{
+      border:none;
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(56,189,248,.12);
+      color: var(--text);
+      border:1px solid rgba(56,189,248,.25);
+      transition:.2s ease;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    .btn:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.45); }
+    .btn.secondary{
+      background: rgba(15,23,42,.55);
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .btn.danger{
+      background: rgba(239,68,68,.12);
+      border-color: rgba(239,68,68,.25);
+    }
+
+    .toggle{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(15,23,42,.55);
+      font-size:13px;
+      color:var(--muted);
+    }
+    .switch{
+      width:44px;height:24px;border-radius:999px;
+      background: rgba(148,163,184,.25);
+      position:relative;
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.12);
+      transition:.2s ease;
+    }
+    .switch::after{
+      content:"";
+      position:absolute;
+      top:3px;left:3px;
+      width:18px;height:18px;border-radius:50%;
+      background: rgba(255,255,255,.85);
+      transition:.2s ease;
+    }
+    .switch.on{
+      background: rgba(34,197,94,.25);
+      border-color: rgba(34,197,94,.35);
+    }
+    .switch.on::after{ left:23px; background: rgba(34,197,94,.95); }
+
+    /* KPI cards */
+    .kpis{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap:12px;
+      margin:14px 0 18px;
+    }
+    .kpi{
+      background: rgba(15,23,42,.58);
+      border:1px solid rgba(255,255,255,.06);
+      border-radius: var(--radius);
+      padding:14px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    .kpi::before{
+      content:"";
+      position:absolute;
+      inset:-1px;
+      background: radial-gradient(450px 200px at 20% 0%, rgba(56,189,248,.20), transparent 55%);
+      pointer-events:none;
+    }
+    .kpi .label{ color:var(--muted); font-size:12px; }
+    .kpi .value{ font-size:22px; font-weight:760; margin-top:8px; }
+    .kpi .sub{ color:var(--muted); font-size:12px; margin-top:6px; }
+
+    /* Panels */
+    .panel{
+      background: rgba(15,23,42,.55);
+      border:1px solid rgba(255,255,255,.06);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .panelHeader{
+      padding:14px 14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .panelHeader .left{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+    .panelHeader h3{ margin:0; font-size:14px; letter-spacing:.2px; }
+    .panelHeader p{ margin:0; color:var(--muted); font-size:12px; }
+    .panelHeader .right{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    select{
+      background: rgba(2,6,23,.35);
+      color: var(--text);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      padding:10px 12px;
+      outline:none;
+      font-size:13px;
+    }
+
+    /* Table-ish list */
+    .list{
+      padding: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .row{
+      border:1px solid rgba(255,255,255,.06);
+      background: rgba(2,6,23,.35);
+      border-radius: 14px;
+      padding:12px;
+      display:grid;
+      grid-template-columns: 1.1fr .6fr .6fr;
+      gap:10px;
+      align-items:start;
+      transition:.15s ease;
+    }
+    .row:hover{ border-color: rgba(56,189,248,.22); transform: translateY(-1px); }
+
+    .msg{
+      font-size:13px;
+      line-height:1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .meta2{
+      color:var(--muted);
+      font-size:12px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      align-items:flex-start;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(15,23,42,.45);
+      font-size:12px;
+      color:var(--text);
+    }
+    .pill.good{ border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.10); }
+    .pill.warn{ border-color: rgba(251,191,36,.28); background: rgba(251,191,36,.10); }
+    .pill.bad{ border-color: rgba(239,68,68,.28); background: rgba(239,68,68,.10); }
+
+    .empty{
+      padding:18px;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .toast{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      background: rgba(15,23,42,.85);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 14px;
+      padding:12px 14px;
+      color:var(--text);
+      box-shadow: var(--shadow);
+      transform: translateY(20px);
+      opacity:0;
+      pointer-events:none;
+      transition:.2s ease;
+      max-width: 420px;
+    }
+    .toast.show{
+      opacity:1;
+      transform: translateY(0);
+    }
+    .toast small{ color:var(--muted); display:block; margin-top:6px; }
+
+    /* Responsive */
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr; }
+      .sidebar{
+        position:relative;
+        height:auto;
+        border-right:none;
+        border-bottom:1px solid rgba(255,255,255,.06);
+      }
+      .sideFooter{ position:relative; bottom:auto; left:auto; right:auto; margin-top:14px; }
+      .kpis{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .row{ grid-template-columns: 1fr; }
+      .input{ min-width: 180px; flex:1; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>SnowSkye Dashboard</h1>
+          <p>Leads • Appointments • Growth</p>
+        </div>
+      </div>
+
+      <div class="nav">
+        <button class="active" data-view="overview">
+          <div class="icon">✨</div>
+          <div class="meta">
+            <div class="t">Overview</div>
+            <div class="d">KPIs + quick insights</div>
+          </div>
+        </button>
+
+        <button data-view="leads">
+          <div class="icon">📩</div>
+          <div class="meta">
+            <div class="t">Leads</div>
+            <div class="d">Captured messages & emails</div>
+          </div>
+        </button>
+
+        <button data-view="appointments">
+          <div class="icon">📅</div>
+          <div class="meta">
+            <div class="t">Appointments</div>
+            <div class="d">Requests & statuses</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="sideFooter">
+        <div class="chip">
+          <span class="dot" id="liveDot"></span>
+          <span id="liveText">Live</span>
+        </div>
+        <div style="margin-top:10px;">
+          <span id="lastSync" style="color:var(--muted)">Last sync: —</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="titleBlock">
+          <h2 id="pageTitle">Overview</h2>
+          <p id="pageDesc">A premium snapshot of your SnowSkye AI performance.</p>
+        </div>
+
+        <div class="actions">
+          <div class="input">
+            <span style="color:var(--muted)">🔎</span>
+            <input id="search" placeholder="Search message, email, status..." />
+          </div>
+
+          <div class="toggle">
+            Auto refresh
+            <div id="autoSwitch" class="switch on" title="Toggle auto refresh"></div>
+          </div>
+
+          <button class="btn secondary" id="refreshBtn">↻ Refresh</button>
+          <button class="btn" id="exportBtn">⬇ Export CSV</button>
+          <button class="btn danger" id="logoutBtn">⎋ Logout</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <section class="kpis" id="kpis">
+        <div class="kpi">
+          <div class="label">Total Leads</div>
+          <div class="value" id="kpiLeads">—</div>
+          <div class="sub" id="kpiLeadsSub">—</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Leads Today</div>
+          <div class="value" id="kpiLeadsToday">—</div>
+          <div class="sub">Compared to yesterday</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Total Appointments</div>
+          <div class="value" id="kpiApps">—</div>
+          <div class="sub" id="kpiAppsSub">—</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Appointments Pending</div>
+          <div class="value" id="kpiPending">—</div>
+          <div class="sub">Needs follow-up</div>
+        </div>
+      </section>
+
+      <!-- Overview Panel -->
+      <section class="panel" id="view-overview">
+        <div class="panelHeader">
+          <div class="left">
+            <h3>Latest activity</h3>
+            <p>Most recent leads and appointment requests.</p>
+          </div>
+          <div class="right">
+            <span class="pill" id="countText">—</span>
+          </div>
+        </div>
+        <div class="list" id="overviewList"></div>
+        <div class="empty" id="overviewEmpty" style="display:none;">No data yet.</div>
+      </section>
+
+      <!-- Leads Panel -->
+      <section class="panel" id="view-leads" style="display:none; margin-top:14px;">
+        <div class="panelHeader">
+          <div class="left">
+            <h3>Leads</h3>
+            <p>Captured conversations and emails from your chatbot.</p>
+          </div>
+          <div class="right">
+            <span class="pill" id="leadCountPill">—</span>
+          </div>
+        </div>
+        <div class="list" id="leadsList"></div>
+        <div class="empty" id="leadsEmpty" style="display:none;">No leads yet.</div>
+      </section>
+
+      <!-- Appointments Panel -->
+      <section class="panel" id="view-appointments" style="display:none; margin-top:14px;">
+        <div class="panelHeader">
+          <div class="left">
+            <h3>Appointments</h3>
+            <p>Appointment requests coming from booking intent.</p>
+          </div>
+          <div class="right">
+            <select id="statusFilter" title="Filter by status">
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <span class="pill" id="appCountPill">—</span>
+          </div>
+        </div>
+        <div class="list" id="appsList"></div>
+        <div class="empty" id="appsEmpty" style="display:none;">No appointments yet.</div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // -----------------------------
+  // State
+  // -----------------------------
+  let VIEW = "overview";
+  let autoRefresh = true;
+  let timer = null;
+
+  let leads = [];
+  let apps = [];
+
+  const els = {
+    pageTitle: document.getElementById("pageTitle"),
+    pageDesc: document.getElementById("pageDesc"),
+    search: document.getElementById("search"),
+    statusFilter: document.getElementById("statusFilter"),
+    autoSwitch: document.getElementById("autoSwitch"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    exportBtn: document.getElementById("exportBtn"),
+    logoutBtn: document.getElementById("logoutBtn"),
+    lastSync: document.getElementById("lastSync"),
+    liveDot: document.getElementById("liveDot"),
+    liveText: document.getElementById("liveText"),
+
+    kpiLeads: document.getElementById("kpiLeads"),
+    kpiLeadsSub: document.getElementById("kpiLeadsSub"),
+    kpiLeadsToday: document.getElementById("kpiLeadsToday"),
+    kpiApps: document.getElementById("kpiApps"),
+    kpiAppsSub: document.getElementById("kpiAppsSub"),
+    kpiPending: document.getElementById("kpiPending"),
+
+    countText: document.getElementById("countText"),
+    leadCountPill: document.getElementById("leadCountPill"),
+    appCountPill: document.getElementById("appCountPill"),
+
+    viewOverview: document.getElementById("view-overview"),
+    viewLeads: document.getElementById("view-leads"),
+    viewApps: document.getElementById("view-appointments"),
+
+    overviewList: document.getElementById("overviewList"),
+    leadsList: document.getElementById("leadsList"),
+    appsList: document.getElementById("appsList"),
+
+    overviewEmpty: document.getElementById("overviewEmpty"),
+    leadsEmpty: document.getElementById("leadsEmpty"),
+    appsEmpty: document.getElementById("appsEmpty"),
+
+    toast: document.getElementById("toast")
+  };
+
+  // -----------------------------
+  // Auth guard (session)
+  // -----------------------------
+  async function guard401(res){
+    if(res.status === 401){
+      window.location.href = "/login.html";
+      return true;
+    }
+    return false;
+  }
+
+  // -----------------------------
+  // Helpers
+  // -----------------------------
+  function fmtDate(ts){
+    if(!ts) return "—";
+    try { return new Date(ts).toLocaleString(); }
+    catch { return "—"; }
+  }
+
+  function safe(v){ return (v === null || v === undefined || v === "") ? "" : String(v); }
+
+  function toast(msg, sub=""){
+    els.toast.innerHTML = `<div>${msg}</div>${sub ? `<small>${sub}</small>` : ""}`;
+    els.toast.classList.add("show");
+    setTimeout(()=>els.toast.classList.remove("show"), 2600);
+  }
+
+  function setView(view){
+    VIEW = view;
+
+    document.querySelectorAll(".nav button").forEach(b=>{
+      b.classList.toggle("active", b.dataset.view === view);
+    });
+
+    els.viewOverview.style.display = (view === "overview") ? "block" : "none";
+    els.viewLeads.style.display = (view === "leads") ? "block" : "none";
+    els.viewApps.style.display = (view === "appointments") ? "block" : "none";
+
+    if(view === "overview"){
+      els.pageTitle.textContent = "Overview";
+      els.pageDesc.textContent = "A premium snapshot of your SnowSkye AI performance.";
+    } else if(view === "leads"){
+      els.pageTitle.textContent = "Leads";
+      els.pageDesc.textContent = "Every message and email captured by SnowSkye AI.";
+    } else {
+      els.pageTitle.textContent = "Appointments";
+      els.pageDesc.textContent = "Booking requests detected from user intent.";
+    }
+
+    renderAll();
+  }
+
+  function withinDays(ts, days){
+    if(!ts) return false;
+    const now = Date.now();
+    const t = new Date(ts).getTime();
+    if(Number.isNaN(t)) return false;
+    return (now - t) <= days * 24 * 60 * 60 * 1000;
+  }
+
+  function isToday(ts){
+    if(!ts) return false;
+    const d = new Date(ts);
+    const now = new Date();
+    return d.toDateString() === now.toDateString();
+  }
+
+  function isYesterday(ts){
+    if(!ts) return false;
+    const d = new Date(ts);
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return d.toDateString() === y.toDateString();
+  }
+
+  function statusPill(status){
+    const s = (status || "pending").toLowerCase();
+    if(s === "confirmed") return `<span class="pill good">● Confirmed</span>`;
+    if(s === "cancelled") return `<span class="pill bad">● Cancelled</span>`;
+    return `<span class="pill warn">● Pending</span>`;
+  }
+
+  function matchSearch(item, q){
+    if(!q) return true;
+    const s = q.toLowerCase();
+    return (
+      safe(item.email).toLowerCase().includes(s) ||
+      safe(item.message).toLowerCase().includes(s) ||
+      safe(item.status).toLowerCase().includes(s) ||
+      safe(item.bot_id).toLowerCase().includes(s)
+    );
+  }
+
+  function toCSV(rows, columns){
+    const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
+    const header = columns.map(esc).join(",");
+    const lines = rows.map(r => columns.map(c => esc(r[c])).join(","));
+    return [header, ...lines].join("\n");
+  }
+
+  function download(filename, text){
+    const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // -----------------------------
+  // Fetch (SESSION COOKIE)
+  // -----------------------------
+  async function fetchAll(){
+    try{
+      els.liveDot.style.background = "var(--warn)";
+      els.liveText.textContent = "Syncing…";
+
+      const [lRes, aRes] = await Promise.all([
+        fetch("/api/leads", { credentials: "include" }),
+        fetch("/api/appointments", { credentials: "include" })
+      ]);
+
+      if(await guard401(lRes) || await guard401(aRes)) return;
+
+      leads = await lRes.json();
+      apps = await aRes.json();
+
+      if(!Array.isArray(leads)) leads = [];
+      if(!Array.isArray(apps)) apps = [];
+
+      els.lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+      els.liveDot.style.background = "var(--good)";
+      els.liveText.textContent = "Live";
+
+      renderAll();
+    }catch(e){
+      els.liveDot.style.background = "var(--bad)";
+      els.liveText.textContent = "Offline";
+      toast("Failed to sync", "Check your server or /api routes.");
+      console.error(e);
+    }
+  }
+
+  // -----------------------------
+  // Render
+  // -----------------------------
+  function renderKPIs(){
+    const totalLeads = leads.length;
+    const totalApps  = apps.length;
+
+    const leadsToday = leads.filter(x => isToday(x.created_at || x.time)).length;
+    const leadsYday  = leads.filter(x => isYesterday(x.created_at || x.time)).length;
+
+    const apps7 = apps.filter(x => withinDays(x.created_at || x.created, 7)).length;
+    const leads7 = leads.filter(x => withinDays(x.created_at || x.time, 7)).length;
+
+    const pending = apps.filter(x => (x.status || "pending").toLowerCase() === "pending").length;
+
+    els.kpiLeads.textContent = totalLeads.toLocaleString();
+
+    const delta = leadsToday - leadsYday;
+    const deltaText = (delta === 0) ? "Same as yesterday" : (delta > 0 ? `+${delta} vs yesterday` : `${delta} vs yesterday`);
+    els.kpiLeadsSub.textContent = `${leads7} in last 7 days • ${deltaText}`;
+
+    els.kpiLeadsToday.textContent = leadsToday.toLocaleString();
+
+    els.kpiApps.textContent = totalApps.toLocaleString();
+    els.kpiAppsSub.textContent = `${apps7} in last 7 days`;
+
+    els.kpiPending.textContent = pending.toLocaleString();
+  }
+
+  function renderOverview(){
+    const q = els.search.value.trim();
+    const combined = [
+      ...leads.map(x => ({...x, _type:"lead"})),
+      ...apps.map(x => ({...x, _type:"appointment"}))
+    ]
+    .filter(x => matchSearch(x, q))
+    .sort((a,b) => new Date(b.created_at || b.time || b.created).getTime() - new Date(a.created_at || a.time || a.created).getTime())
+    .slice(0, 12);
+
+    els.countText.textContent = `${combined.length} latest`;
+
+    els.overviewList.innerHTML = "";
+    els.overviewEmpty.style.display = combined.length ? "none" : "block";
+
+    combined.forEach(item=>{
+      const typeTag = item._type === "lead"
+        ? `<span class="pill">📩 Lead</span>`
+        : `<span class="pill">📅 Appointment</span>`;
+
+      const statusTag = item._type === "appointment" ? statusPill(item.status) : "";
+
+      const ts = item.created_at || item.time || item.created;
+
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <div class="msg">${safe(item.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+        <div class="meta2">
+          ${typeTag}
+          ${safe(item.email) ? `<span class="pill">✉ ${safe(item.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+          ${statusTag}
+        </div>
+        <div class="meta2">
+          <span class="pill">🕒 ${fmtDate(ts)}</span>
+        </div>
+      `;
+      els.overviewList.appendChild(row);
+    });
+  }
+
+  function renderLeads(){
+    const q = els.search.value.trim();
+    const list = leads
+      .filter(x => matchSearch(x, q))
+      .sort((a,b) => new Date(b.created_at || b.time).getTime() - new Date(a.created_at || a.time).getTime());
+
+    els.leadCountPill.textContent = `${list.length} leads`;
+    els.leadsList.innerHTML = "";
+    els.leadsEmpty.style.display = list.length ? "none" : "block";
+
+    list.forEach(l=>{
+      const ts = l.created_at || l.time;
+
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <div class="msg">${safe(l.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+        <div class="meta2">
+          ${safe(l.email) ? `<span class="pill">✉ ${safe(l.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+        </div>
+        <div class="meta2">
+          <span class="pill">🕒 ${fmtDate(ts)}</span>
+          <button class="btn secondary" style="padding:8px 10px;border-radius:12px" data-copy="${safe(l.email)}">Copy email</button>
+        </div>
+      `;
+      els.leadsList.appendChild(row);
+    });
+
+    els.leadsList.querySelectorAll("button[data-copy]").forEach(btn=>{
+      btn.onclick = async () => {
+        const val = btn.getAttribute("data-copy");
+        if(!val){ toast("No email to copy"); return; }
+        try{
+          await navigator.clipboard.writeText(val);
+          toast("Copied!", val);
+        }catch{
+          toast("Copy failed");
+        }
+      };
+    });
+  }
+
+  function renderAppointments(){
+    const q = els.search.value.trim();
+    const status = els.statusFilter.value;
+
+    let list = apps
+      .filter(x => matchSearch(x, q))
+      .sort((a,b) => new Date(b.created_at || b.created).getTime() - new Date(a.created_at || a.created).getTime());
+
+    if(status !== "all"){
+      list = list.filter(x => (x.status || "pending").toLowerCase() === status);
+    }
+
+    els.appCountPill.textContent = `${list.length} appointments`;
+    els.appsList.innerHTML = "";
+    els.appsEmpty.style.display = list.length ? "none" : "block";
+
+    list.forEach(a=>{
+      const ts = a.created_at || a.created;
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <div class="msg">${safe(a.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+        <div class="meta2">
+          ${safe(a.email) ? `<span class="pill">✉ ${safe(a.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+          ${statusPill(a.status)}
+        </div>
+        <div class="meta2">
+          <span class="pill">🕒 ${fmtDate(ts)}</span>
+          <span class="pill">🧾 ID: ${safe(a.id).slice(0,8) || "—"}</span>
+        </div>
+      `;
+      els.appsList.appendChild(row);
+    });
+  }
+
+  function renderAll(){
+    renderKPIs();
+    if(VIEW === "overview") renderOverview();
+    if(VIEW === "leads") renderLeads();
+    if(VIEW === "appointments") renderAppointments();
+  }
+
+  // -----------------------------
+  // Events
+  // -----------------------------
+  document.querySelectorAll(".nav button").forEach(btn=>{
+    btn.addEventListener("click", ()=> setView(btn.dataset.view));
+  });
+
+  els.search.addEventListener("input", ()=> renderAll());
+  els.statusFilter.addEventListener("change", ()=> renderAll());
+
+  els.refreshBtn.onclick = () => {
+    toast("Refreshing…");
+    fetchAll();
+  };
+
+  els.autoSwitch.onclick = () => {
+    autoRefresh = !autoRefresh;
+    els.autoSwitch.classList.toggle("on", autoRefresh);
+    toast(autoRefresh ? "Auto refresh ON" : "Auto refresh OFF");
+    setupTimer();
+  };
+
+  els.logoutBtn.onclick = async () => {
+    try{
+      await fetch("/logout", { method: "POST", credentials: "include" });
+    }catch{}
+    try{ localStorage.removeItem("token"); }catch{}
+    window.location.href = "/login.html";
+  };
+
+  els.exportBtn.onclick = () => {
+    if(VIEW === "leads"){
+      const columns = ["id","email","message","time"];
+      const csv = toCSV(leads, columns);
+      download(`snowskye_leads_${Date.now()}.csv`, csv);
+      toast("Exported CSV", "Leads downloaded.");
+      return;
+    }
+    if(VIEW === "appointments"){
+      const columns = ["id","email","message","status","created"];
+      const csv = toCSV(apps, columns);
+      download(`snowskye_appointments_${Date.now()}.csv`, csv);
+      toast("Exported CSV", "Appointments downloaded.");
+      return;
+    }
+
+    const columnsL = ["id","email","message","time"];
+    const columnsA = ["id","email","message","status","created"];
+    download(`snowskye_leads_${Date.now()}.csv`, toCSV(leads, columnsL));
+    download(`snowskye_appointments_${Date.now()}.csv`, toCSV(apps, columnsA));
+    toast("Exported CSV", "Leads + Appointments downloaded.");
+  };
+
+  function setupTimer(){
+    if(timer) clearInterval(timer);
+    if(autoRefresh){
+      timer = setInterval(fetchAll, 15000);
+    }
+  }
+
+  // -----------------------------
+  // Boot
+  // -----------------------------
+  setView("overview");
+  fetchAll();
+  setupTimer();
+</script>
+</body>
+</html>

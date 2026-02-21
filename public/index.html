@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SnowSkye AI Premium</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#38bdf8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg0:#020617; --bg1:#0b1222;
+  --card: rgba(15,23,42,.72);
+  --card2: rgba(2,6,23,.45);
+  --line: rgba(255,255,255,.10);
+  --text:#e5e7eb; --muted:#94a3b8;
+  --brand:#38bdf8; --brand2:#6366f1;
+  --good:#22c55e; --warn:#fbbf24; --bad:#ef4444;
+  --shadow: 0 18px 60px rgba(0,0,0,.50);
+  --r: 22px;
+}
+
+*{box-sizing:border-box;font-family:Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+body{
+  margin:0; min-height:100vh; color:var(--text);
+  background:
+    radial-gradient(1200px 800px at 12% 10%, rgba(56,189,248,.18), transparent 55%),
+    radial-gradient(900px 700px at 90% 30%, rgba(99,102,241,.16), transparent 55%),
+    linear-gradient(135deg, var(--bg0), var(--bg1));
+}
+
+/* Launcher */
+.launcher{
+  position:fixed; right:20px; bottom:20px;
+  z-index:9999; display:flex; align-items:center; gap:10px;
+}
+.badge{
+  display:none;
+  padding:8px 10px; border-radius:999px;
+  background: rgba(15,23,42,.62);
+  border:1px solid rgba(255,255,255,.10);
+  box-shadow: var(--shadow);
+  font-size:12px; color:var(--muted);
+}
+.floatBtn{
+  width:60px; height:60px; border-radius:20px;
+  border:none; cursor:pointer;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  box-shadow: 0 18px 55px rgba(56,189,248,.25);
+  color:#06111f; font-size:22px;
+  transition:.18s ease;
+  position:relative; overflow:hidden;
+}
+.floatBtn:hover{ transform: translateY(-2px); }
+.floatBtn:active{ transform: translateY(0); }
+.floatBtn::after{
+  content:""; position:absolute; inset:-1px;
+  background: radial-gradient(240px 140px at 30% 10%, rgba(255,255,255,.25), transparent 55%);
+  pointer-events:none;
+}
+
+/* Chat Modal */
+.chat{
+  position:fixed; right:20px; bottom:94px;
+  width:390px; height:610px;
+  z-index:9999;
+  display:none; flex-direction:column;
+  background: var(--card);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  overflow:hidden;
+  transform: translateY(12px);
+  opacity:0;
+  transition: .22s ease;
+}
+.chat.open{
+  display:flex;
+  transform: translateY(0);
+  opacity:1;
+}
+
+/* Header */
+.head{
+  padding:12px;
+  background: linear-gradient(135deg, rgba(56,189,248,.20), rgba(99,102,241,.16));
+  border-bottom:1px solid rgba(255,255,255,.10);
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.brandRow{ display:flex; align-items:center; gap:10px; min-width:0; }
+.logo{
+  width:36px;height:36px;border-radius:14px;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  box-shadow: 0 10px 30px rgba(56,189,248,.18);
+  flex:0 0 auto;
+}
+.title{ min-width:0; }
+.title b{
+  display:block; font-size:13.5px; letter-spacing:.2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.title span{
+  display:flex; align-items:center; gap:6px;
+  color:var(--muted); font-size:11.5px; margin-top:2px;
+}
+.dot{
+  width:7px;height:7px;border-radius:50%;
+  background: var(--good);
+  box-shadow: 0 0 0 4px rgba(34,197,94,.12);
+}
+.actions{ display:flex; gap:8px; align-items:center; }
+.iconBtn{
+  border:none; cursor:pointer;
+  padding:9px 10px; border-radius:14px;
+  background: rgba(2,6,23,.30);
+  border:1px solid rgba(255,255,255,.10);
+  color:var(--text);
+  transition:.15s ease;
+}
+.iconBtn:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.25); }
+
+/* Tabs */
+.tabs{ display:flex; gap:8px; padding:10px 10px 0; }
+.tab{
+  flex:1; border:none; cursor:pointer;
+  padding:10px; border-radius:14px;
+  background: rgba(2,6,23,.25);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--muted);
+  transition:.15s ease;
+  font-size:12.5px;
+}
+.tab.active{
+  color:var(--text);
+  border-color: rgba(56,189,248,.35);
+  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
+}
+
+/* Quick actions */
+.quick{
+  padding:10px 10px 0;
+  display:flex; gap:8px; flex-wrap:wrap;
+}
+.pill{
+  border:none; cursor:pointer;
+  padding:10px 12px; border-radius:16px;
+  background: rgba(2,6,23,.25);
+  border:1px solid rgba(255,255,255,.10);
+  color:var(--muted);
+  transition:.15s ease;
+  font-size:12px;
+}
+.pill:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.22); color:var(--text); }
+.pill.primary{
+  background: rgba(56,189,248,.12);
+  border-color: rgba(56,189,248,.22);
+  color:var(--text);
+}
+
+/* Panels */
+.panel{ display:none; flex:1; overflow:hidden; }
+.panel.active{ display:flex; flex-direction:column; }
+
+/* Messages */
+.messages{
+  flex:1; padding:12px;
+  overflow:auto;
+  display:flex; flex-direction:column; gap:10px;
+}
+.bubble{
+  max-width:82%;
+  padding:10px 12px;
+  border-radius: 16px;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(2,6,23,.35);
+  box-shadow: 0 10px 28px rgba(0,0,0,.25);
+  font-size:13px;
+  line-height:1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble.user{
+  margin-left:auto;
+  border-color: rgba(56,189,248,.25);
+  background: linear-gradient(135deg, rgba(56,189,248,.18), rgba(99,102,241,.12));
+}
+.bubble.bot{ margin-right:auto; }
+.meta{
+  margin-top:6px;
+  display:flex; justify-content:space-between; gap:10px;
+  font-size:11px; color:var(--muted);
+}
+
+/* typing */
+.typing{ display:inline-flex; gap:6px; align-items:center; }
+.dotty{
+  width:6px;height:6px;border-radius:50%;
+  background: rgba(229,231,235,.55);
+  animation:bop 1s infinite ease-in-out;
+}
+.dotty:nth-child(2){ animation-delay:.15s }
+.dotty:nth-child(3){ animation-delay:.30s }
+@keyframes bop{
+  0%,100%{ transform: translateY(0); opacity:.6 }
+  50%{ transform: translateY(-3px); opacity:1 }
+}
+
+/* Composer */
+.composer{
+  padding:10px;
+  border-top:1px solid rgba(255,255,255,.10);
+  background: rgba(2,6,23,.25);
+  display:flex; gap:8px; align-items:center;
+}
+.field{
+  flex:1; display:flex; align-items:center; gap:8px;
+  padding:10px 12px;
+  border-radius: 16px;
+  background: rgba(2,6,23,.30);
+  border:1px solid rgba(255,255,255,.10);
+}
+.field input{
+  width:100%; border:none; outline:none;
+  background:transparent; color:var(--text);
+  font-size:13px;
+}
+.sendBtn{
+  border:none; cursor:pointer;
+  padding:10px 14px; border-radius:16px;
+  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
+  border:1px solid rgba(56,189,248,.22);
+  color:var(--text);
+  transition:.15s ease;
+}
+.sendBtn:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.35); }
+.sendBtn.secondary{
+  background: rgba(2,6,23,.25);
+  border-color: rgba(255,255,255,.10);
+  color:var(--muted);
+}
+
+/* Activity */
+.activity{ padding:12px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
+.card{
+  border-radius: 16px;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(2,6,23,.30);
+  padding:12px;
+}
+.card h4{ margin:0 0 8px; font-size:12.5px; letter-spacing:.2px; }
+.item{
+  padding:10px 10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.07);
+  background: rgba(15,23,42,.35);
+  margin-top:8px;
+}
+.item b{ font-size:12px; }
+.item p{ margin:6px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+.item small{ display:block; margin-top:6px; color: rgba(148,163,184,.85); font-size:11px; }
+
+.status{
+  display:inline-flex; gap:6px; align-items:center;
+  font-size:11.5px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(15,23,42,.35);
+  color: var(--muted);
+  margin-left:6px;
+}
+.status.pending{ border-color: rgba(251,191,36,.25); background: rgba(251,191,36,.10); color:#fde68a; }
+.status.confirmed{ border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.10); color:#bbf7d0; }
+
+/* Booking Modal */
+.modalWrap{
+  position:absolute; inset:0;
+  display:none;
+  background: rgba(2,6,23,.55);
+  backdrop-filter: blur(8px);
+  z-index:10;
+  padding:12px;
+}
+.modalWrap.open{ display:flex; align-items:center; justify-content:center; }
+
+.modal{
+  width:100%;
+  border-radius: 20px;
+  background: rgba(15,23,42,.85);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.modalHead{
+  padding:12px;
+  display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,.10);
+  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
+}
+.modalHead b{ font-size:13px; }
+.modalBody{ padding:12px; display:grid; gap:10px; }
+.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.f{
+  padding:10px 12px;
+  border-radius: 14px;
+  background: rgba(2,6,23,.35);
+  border:1px solid rgba(255,255,255,.12);
+}
+.f label{
+  display:block;
+  font-size:11px;
+  color: var(--muted);
+  margin-bottom:6px;
+}
+.f input, .f select, .f textarea{
+  width:100%;
+  border:none; outline:none;
+  background:transparent;
+  color:var(--text);
+  font-size:13px;
+}
+.f textarea{ resize:none; min-height:74px; }
+
+.modalFoot{
+  padding:12px;
+  display:flex; gap:8px; justify-content:flex-end;
+  border-top:1px solid rgba(255,255,255,.10);
+}
+.bigBtn{
+  border:none; cursor:pointer;
+  padding:10px 12px;
+  border-radius: 14px;
+  font-size:12.5px;
+  transition:.15s ease;
+}
+.bigBtn.primary{
+  color:#06111f;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+}
+.bigBtn.secondary{
+  background: rgba(2,6,23,.30);
+  border:1px solid rgba(255,255,255,.10);
+  color: var(--text);
+}
+.bigBtn:disabled{ opacity:.65; cursor:not-allowed; }
+
+/* Toast */
+.toast{
+  position:fixed;
+  right:20px; bottom:92px;
+  z-index:10000;
+  background: rgba(15,23,42,.92);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding:12px 14px;
+  max-width: 320px;
+  transform: translateY(16px);
+  opacity:0;
+  pointer-events:none;
+  transition:.2s ease;
+}
+.toast.show{ opacity:1; transform: translateY(0); }
+.toast small{ display:block; margin-top:6px; color:var(--muted); }
+
+/* Mobile */
+@media (max-width: 430px){
+  .chat{ right:10px; left:10px; width:auto; }
+  .launcher{ right:10px; bottom:10px; }
+  .toast{ right:10px; left:10px; max-width:none; }
+  .grid2{ grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="launcher">
+  <div class="badge" id="badge">New</div>
+  <button class="floatBtn" id="openBtn" title="Open SnowSkye AI">💬</button>
+</div>
+
+<div class="chat" id="chat">
+
+  <!-- Booking Modal -->
+  <div class="modalWrap" id="bookModal">
+    <div class="modal">
+      <div class="modalHead">
+        <b>📅 Book a Consultation</b>
+        <button class="iconBtn" id="closeModalBtn" title="Close">✖</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="grid2">
+          <div class="f">
+            <label>Your name</label>
+            <input id="bkName" placeholder="John / Chris" />
+          </div>
+
+          <div class="f">
+            <label>Email</label>
+            <input id="bkEmail" placeholder="you@email.com" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="f">
+            <label>Service</label>
+            <select id="bkService">
+              <option value="Website & AI Chatbot">Website & AI Chatbot</option>
+              <option value="AI Consultation">AI Consultation</option>
+              <option value="Marketing / Growth">Marketing / Growth</option>
+              <option value="Custom Build">Custom Build</option>
+            </select>
+          </div>
+
+          <div class="f">
+            <label>Preferred date & time</label>
+            <input id="bkTime" placeholder="e.g. Feb 25, 3pm" />
+          </div>
+        </div>
+
+        <div class="f">
+          <label>Business / message</label>
+          <textarea id="bkMsg" placeholder="Tell us your business type + goal (sales, bookings, leads)."></textarea>
+        </div>
+
+        <div class="f">
+          <label>What happens next?</label>
+          <div style="color:var(--muted); font-size:12px; line-height:1.5;">
+            We’ll save your request. If your server is set with email confirmation, you’ll receive a confirmation link.
+          </div>
+        </div>
+      </div>
+
+      <div class="modalFoot">
+        <button class="bigBtn secondary" id="cancelBook">Cancel</button>
+        <button class="bigBtn primary" id="submitBook">Submit Booking</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="head">
+    <div class="brandRow">
+      <div class="logo"></div>
+      <div class="title">
+        <b>SnowSkye AI</b>
+        <span><span class="dot" id="liveDot"></span><span id="liveText">Live</span></span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="iconBtn" id="soundBtn" title="Toggle voice">🔊</button>
+      <button class="iconBtn" id="closeBtn" title="Close">✖</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="chatPanel">Chat</button>
+    <button class="tab" data-tab="activityPanel">Activity</button>
+  </div>
+
+  <!-- Quick -->
+  <div class="quick">
+    <button class="pill primary" id="bookBtn">📅 Book Consultation</button>
+    <button class="pill primary" data-quick="I want a website for my business.">🚀 Get Website</button>
+    <button class="pill" data-quick="What is your pricing?">💰 Pricing</button>
+    <button class="pill" data-quick="Help me get more customers.">📈 Grow</button>
+    <button class="pill" id="emailHelpBtn">✉ Save my email</button>
+  </div>
+
+  <!-- Chat Panel -->
+  <div class="panel active" id="chatPanel">
+    <div class="messages" id="messages"></div>
+
+    <div class="composer">
+      <div class="field">
+        <span style="color:var(--muted)">✍</span>
+        <input id="input" placeholder="Ask SnowSkye AI..." />
+      </div>
+      <button class="sendBtn" id="sendBtn">Send</button>
+      <button class="sendBtn secondary" id="micBtn" title="Voice input">🎤</button>
+    </div>
+  </div>
+
+  <!-- Activity Panel -->
+  <div class="panel" id="activityPanel">
+    <div class="activity">
+      <div class="card">
+        <h4>Recent Activity (Safe Preview)</h4>
+        <div id="activityList"></div>
+      </div>
+      <div class="card">
+        <h4>Fast Tip</h4>
+        <div class="item">
+          <b>Pro</b>
+          <p>Type your email anytime (example: you@email.com). SnowSkye will save it and follow up.</p>
+          <small>Privacy: widget never shows the real admin leads list.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API="/chat";
+const ACTIVITY_API="/api/public/recent";
+
+const chat = document.getElementById("chat");
+const openBtn = document.getElementById("openBtn");
+const closeBtn = document.getElementById("closeBtn");
+
+const soundBtn = document.getElementById("soundBtn");
+const liveDot = document.getElementById("liveDot");
+const liveText = document.getElementById("liveText");
+
+const messages = document.getElementById("messages");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const micBtn = document.getElementById("micBtn");
+
+const badge = document.getElementById("badge");
+const toastEl = document.getElementById("toast");
+
+const activityList = document.getElementById("activityList");
+const emailHelpBtn = document.getElementById("emailHelpBtn");
+
+// Booking modal elements
+const bookBtn = document.getElementById("bookBtn");
+const bookModal = document.getElementById("bookModal");
+const closeModalBtn = document.getElementById("closeModalBtn");
+const cancelBook = document.getElementById("cancelBook");
+const submitBook = document.getElementById("submitBook");
+
+const bkName = document.getElementById("bkName");
+const bkEmail = document.getElementById("bkEmail");
+const bkService = document.getElementById("bkService");
+const bkTime = document.getElementById("bkTime");
+const bkMsg = document.getElementById("bkMsg");
+
+let voiceOn=true;
+let typingEl=null;
+
+function showToast(msg, sub=""){
+  toastEl.innerHTML = `<div>${msg}</div>${sub ? `<small>${sub}</small>` : ""}`;
+  toastEl.classList.add("show");
+  setTimeout(()=>toastEl.classList.remove("show"), 2500);
+}
+
+function openChat(){
+  chat.classList.add("open");
+  badge.style.display="none";
+  input.focus();
+  loadActivity();
+}
+function closeChatUI(){ chat.classList.remove("open"); }
+
+openBtn.onclick = () => chat.classList.contains("open") ? closeChatUI() : openChat();
+closeBtn.onclick = closeChatUI;
+
+soundBtn.onclick = () => {
+  voiceOn = !voiceOn;
+  soundBtn.textContent = voiceOn ? "🔊" : "🔇";
+};
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+
+    const target = t.dataset.tab;
+    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+    document.getElementById(target).classList.add("active");
+
+    if(target==="activityPanel") loadActivity();
+    if(target==="chatPanel") input.focus();
+  };
+});
+
+document.querySelectorAll("[data-quick]").forEach(b=>{
+  b.onclick=()=>{
+    input.value = b.getAttribute("data-quick");
+    send();
+  };
+});
+
+emailHelpBtn.onclick=()=>{
+  addBubble("Type your email here (example: you@email.com). I will save it for follow-up.", "bot");
+  speak("Type your email here. I will save it for follow up.");
+  input.focus();
+};
+
+// Booking modal open/close
+function openBooking(){
+  bookModal.classList.add("open");
+  // optionally prefill email if user typed it earlier
+  setTimeout(()=>bkName.focus(), 60);
+}
+function closeBooking(){
+  bookModal.classList.remove("open");
+}
+bookBtn.onclick = openBooking;
+closeModalBtn.onclick = closeBooking;
+cancelBook.onclick = closeBooking;
+
+// Helpers
+function nowTime(){
+  return new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+}
+
+function addBubble(text, who="bot"){
+  const wrap=document.createElement("div");
+  wrap.className="bubble "+who;
+
+  const msg=document.createElement("div");
+  msg.textContent=text;
+
+  const meta=document.createElement("div");
+  meta.className="meta";
+  meta.innerHTML=`<span>${who==="user"?"You":"SnowSkye AI"}</span><span>${nowTime()}</span>`;
+
+  wrap.appendChild(msg);
+  wrap.appendChild(meta);
+
+  messages.appendChild(wrap);
+  messages.scrollTop=messages.scrollHeight;
+}
+
+function showTyping(){
+  if(typingEl) return;
+  typingEl=document.createElement("div");
+  typingEl.className="bubble bot";
+  typingEl.innerHTML=`
+    <div class="typing"><span class="dotty"></span><span class="dotty"></span><span class="dotty"></span></div>
+    <div class="meta"><span>SnowSkye AI</span><span>${nowTime()}</span></div>
+  `;
+  messages.appendChild(typingEl);
+  messages.scrollTop=messages.scrollHeight;
+}
+function hideTyping(){
+  if(typingEl){ typingEl.remove(); typingEl=null; }
+}
+
+function speak(text){
+  if(!voiceOn) return;
+  try{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang="en-US";
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }catch{}
+}
+
+function detectEmail(text){
+  const r = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+  const m = String(text||"").match(r);
+  return m ? m[0] : "";
+}
+
+// Send chat
+async function send(){
+  const text=(input.value||"").trim();
+  if(!text) return;
+
+  addBubble(text,"user");
+  input.value="";
+
+  const maybeEmail = detectEmail(text);
+  if(maybeEmail){
+    showToast("Email detected ✅", maybeEmail);
+  }
+
+  showTyping();
+
+  try{
+    const res=await fetch(API,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:text})
+    });
+
+    const data=await res.json().catch(()=>({}));
+    hideTyping();
+
+    const reply = data.reply || "Sorry, I couldn't respond right now.";
+    addBubble(reply,"bot");
+    speak(reply);
+
+    badge.style.display="inline-flex";
+    badge.textContent="Updated";
+  }catch(e){
+    hideTyping();
+    addBubble("Server error. Please try again.", "bot");
+    liveDot.style.background="var(--bad)";
+    liveText.textContent="Offline";
+  }
+}
+
+sendBtn.onclick=send;
+input.addEventListener("keydown",(e)=>{ if(e.key==="Enter") send(); });
+
+// Voice input
+micBtn.onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ addBubble("Voice input not supported on this browser.","bot"); return; }
+  const rec=new SR();
+  rec.lang="en-US";
+  rec.start();
+  rec.onresult=(e)=>{ input.value=e.results[0][0].transcript; send(); };
+};
+
+// Submit Booking (sends to /chat with structured message + email)
+submitBook.onclick = async () => {
+  const name = (bkName.value || "").trim();
+  const email = (bkEmail.value || "").trim();
+  const service = (bkService.value || "").trim();
+  const time = (bkTime.value || "").trim();
+  const msg = (bkMsg.value || "").trim();
+
+  if(!email){
+    showToast("Email required", "Please enter your email to book.");
+    return;
+  }
+
+  submitBook.disabled = true;
+  submitBook.textContent = "Submitting...";
+
+  const bookingMessage =
+`BOOKING REQUEST
+Name: ${name || "(not provided)"}
+Email: ${email}
+Service: ${service || "(not provided)"}
+Preferred time: ${time || "(not provided)"}
+Message: ${msg || "(none)"}
+`;
+
+  // Put it into chat UI as if user sent it
+  closeBooking();
+  addBubble("📅 Booking request sent.\n" + bookingMessage, "user");
+  showTyping();
+
+  try{
+    const res = await fetch(API, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        message: bookingMessage,
+        email: email
+      })
+    });
+
+    const data = await res.json().catch(()=>({}));
+    hideTyping();
+
+    const reply = data.reply || "Booking sent. We'll contact you soon.";
+    addBubble(reply, "bot");
+    speak(reply);
+
+    showToast("Booking submitted ✅", "Check your email if confirmation is enabled.");
+    badge.style.display="inline-flex";
+    badge.textContent="Booked";
+
+    // reset form
+    bkName.value = "";
+    bkEmail.value = "";
+    bkTime.value = "";
+    bkMsg.value = "";
+  }catch(e){
+    hideTyping();
+    addBubble("Booking failed. Please try again.", "bot");
+    showToast("Failed ❌", "Server error while submitting booking.");
+  }finally{
+    submitBook.disabled = false;
+    submitBook.textContent = "Submit Booking";
+  }
+};
+
+// Activity
+function statusChip(status){
+  const s=(status||"pending").toLowerCase();
+  if(s==="confirmed") return `<span class="status confirmed">● confirmed</span>`;
+  return `<span class="status pending">● pending</span>`;
+}
+
+async function loadActivity(){
+  try{
+    liveDot.style.background="var(--warn)";
+    liveText.textContent="Syncing…";
+
+    const res=await fetch(ACTIVITY_API);
+    const data=await res.json().catch(()=>({}));
+
+    const leads=Array.isArray(data.leads)?data.leads:[];
+    const apps=Array.isArray(data.appointments)?data.appointments:[];
+
+    activityList.innerHTML="";
+
+    if(!leads.length && !apps.length){
+      activityList.innerHTML=`<div class="item"><b>No activity yet</b><p>Once users chat, you’ll see a safe preview here.</p></div>`;
+    }
+
+    leads.slice(0,6).forEach(l=>{
+      const div=document.createElement("div");
+      div.className="item";
+      div.innerHTML=`
+        <b>Lead</b>
+        <p>${l.message || "(no message)"}</p>
+        <small>${new Date(l.time).toLocaleString()}</small>
+      `;
+      activityList.appendChild(div);
+    });
+
+    apps.slice(0,6).forEach(a=>{
+      const div=document.createElement("div");
+      div.className="item";
+      div.innerHTML=`
+        <b>Appointment</b> ${statusChip(a.status)}
+        <p>${a.message || "(no message)"}</p>
+        <small>${new Date(a.created).toLocaleString()}</small>
+      `;
+      activityList.appendChild(div);
+    });
+
+    liveDot.style.background="var(--good)";
+    liveText.textContent="Live";
+  }catch(e){
+    console.error(e);
+    liveDot.style.background="var(--bad)";
+    liveText.textContent="Offline";
+    activityList.innerHTML=`<div class="item"><b>Unable to load</b><p>Check /api/public/recent</p></div>`;
+  }
+}
+
+// Welcome
+setTimeout(()=>{
+  addBubble("Hi, I’m SnowSkye AI. Tell me your business type + your goal, and I’ll help you grow fast.", "bot");
+  speak("Hi, I’m SnowSkye AI. Tell me your business type and your goal, and I’ll help you grow fast.");
+  badge.style.display="inline-flex";
+  badge.textContent="New";
+}, 650);
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(()=>{});
+}
+</script>
+
+</body>
+</html>
