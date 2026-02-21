@@ -10,351 +10,268 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
-
 *{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:'Poppins',sans-serif;
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:'Poppins',sans-serif;
 }
 
 body{
-background:#0f172a;
-color:white;
+  background:#0f172a;
+  color:white;
 }
 
 /* NAVBAR */
-
 .navbar{
-background:#020617;
-padding:18px 40px;
-display:flex;
-justify-content:space-between;
-align-items:center;
-border-bottom:1px solid rgba(255,255,255,0.05);
+  background:#020617;
+  padding:18px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(255,255,255,0.05);
 }
-
 .logo{
-font-size:24px;
-font-weight:700;
-color:#38bdf8;
+  font-size:24px;
+  font-weight:700;
+  color:#38bdf8;
 }
-
 .nav-links a{
-margin-left:25px;
-text-decoration:none;
-color:#cbd5e1;
+  margin-left:25px;
+  text-decoration:none;
+  color:#cbd5e1;
 }
-
-.nav-links a:hover{
-color:#38bdf8;
-}
+.nav-links a:hover{ color:#38bdf8; }
 
 /* HERO */
-
 .hero{
-padding:80px 20px;
-text-align:center;
-background:linear-gradient(135deg,#020617,#0f172a);
+  padding:80px 20px;
+  text-align:center;
+  background:linear-gradient(135deg,#020617,#0f172a);
 }
-
 .hero h1{
-font-size:40px;
-margin-bottom:10px;
+  font-size:40px;
+  margin-bottom:10px;
 }
-
 .hero p{
-color:#94a3b8;
+  color:#94a3b8;
 }
 
 /* CONTAINER */
-
 .container{
-max-width:1100px;
-margin:auto;
-padding:40px 20px;
-display:grid;
-grid-template-columns:1fr 1fr;
-gap:40px;
+  max-width:1100px;
+  margin:auto;
+  padding:40px 20px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:40px;
 }
 
 /* CARD */
-
 .card{
-background:#020617;
-padding:30px;
-border-radius:15px;
-border:1px solid rgba(255,255,255,0.05);
+  background:#020617;
+  padding:30px;
+  border-radius:15px;
+  border:1px solid rgba(255,255,255,0.05);
 }
-
 .card h3{
-color:#38bdf8;
-margin-bottom:20px;
+  color:#38bdf8;
+  margin-bottom:20px;
 }
 
 /* FORM */
-
 form{
-display:flex;
-flex-direction:column;
-gap:15px;
+  display:flex;
+  flex-direction:column;
+  gap:15px;
 }
-
 input, textarea{
-
-padding:14px;
-border-radius:8px;
-border:1px solid rgba(255,255,255,0.1);
-background:#020617;
-color:white;
-
+  padding:14px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.1);
+  background:#020617;
+  color:white;
 }
+textarea{ min-height:140px; }
 
 button{
-
-padding:15px;
-border:none;
-border-radius:30px;
-background:linear-gradient(45deg,#38bdf8,#0ea5e9);
-color:white;
-font-weight:600;
-cursor:pointer;
-
+  padding:15px;
+  border:none;
+  border-radius:30px;
+  background:linear-gradient(45deg,#38bdf8,#0ea5e9);
+  color:white;
+  font-weight:600;
+  cursor:pointer;
 }
-
-button:hover{
-opacity:.9;
+button:disabled{
+  opacity:.6;
+  cursor:not-allowed;
 }
 
 /* SUCCESS */
-
 .success{
-
-background:#022c22;
-padding:15px;
-border-radius:10px;
-display:none;
-
+  background:#022c22;
+  padding:15px;
+  border-radius:10px;
+  display:none;
+  color:#bbf7d0;
 }
 
 /* TRUST */
-
 .trust{
-
-text-align:center;
-padding:40px;
-
+  text-align:center;
+  padding:40px;
 }
-
 .trust h3{
-color:#38bdf8;
-margin-bottom:10px;
+  color:#38bdf8;
+  margin-bottom:10px;
 }
 
 /* FOOTER */
-
 footer{
-
-border-top:1px solid rgba(255,255,255,0.05);
-padding:30px;
-text-align:center;
-color:#94a3b8;
-
+  border-top:1px solid rgba(255,255,255,0.05);
+  padding:30px;
+  text-align:center;
+  color:#94a3b8;
 }
 
 /* MOBILE */
-
 @media(max-width:768px){
-
-.container{
-grid-template-columns:1fr;
+  .container{ grid-template-columns:1fr; }
+  .hero h1{ font-size:28px; }
 }
-
-.hero h1{
-font-size:28px;
-}
-
-}
-
 </style>
 
 </head>
 <body>
 
-
 <!-- NAVBAR -->
-
 <div class="navbar">
-
-<div class="logo">SnowSkye AI</div>
-
-<div class="nav-links">
-
-<a href="index.html">Home</a>
-<a href="services.html">Services</a>
-<a href="portfolio.html">Portfolio</a>
-<a href="contact.html">Contact</a>
-
+  <div class="logo">SnowSkye AI</div>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="services.html">Services</a>
+    <a href="portfolio.html">Portfolio</a>
+    <a href="contact.html">Contact</a>
+  </div>
 </div>
-
-</div>
-
 
 <!-- HERO -->
-
 <div class="hero">
-
-<h1>Contact SnowSkye AI</h1>
-
-<p>We build powerful websites and AI chatbots for businesses worldwide.</p>
-
+  <h1>Contact SnowSkye AI</h1>
+  <p>We build powerful websites and AI chatbots for businesses worldwide.</p>
 </div>
-
 
 <!-- CONTENT -->
-
 <div class="container">
 
+  <!-- INFO -->
+  <div class="card">
+    <h3>Business Information</h3>
+    <p>🌐 Service: Website Development & AI Chatbot Integration</p>
+    <p>📧 Email: snowskye16@gmail.com</p>
+    <p>⚡ Response Time: Within 24 Hours</p>
+    <p>🌎 Available Worldwide</p>
+    <p>💼 Freelance & Business Projects Accepted</p>
+    <p>🔒 Secure & Professional Service</p>
+  </div>
 
-<!-- INFO -->
+  <!-- FORM -->
+  <div class="card">
+    <h3>Send Project Inquiry</h3>
 
-<div class="card">
+    <form id="contactForm">
+      <input type="text" id="name" placeholder="Your Name" required>
+      <input type="email" id="email" placeholder="Your Email" required>
+      <textarea id="message" placeholder="Tell us about your project" required></textarea>
+      <button type="submit" id="sendBtn">Send Message</button>
+    </form>
 
-<h3>Business Information</h3>
-
-<p>🌐 Service: Website Development & AI Chatbot Integration</p>
-
-<p>📧 Email: snowskye16@gmail.com</p>
-
-<p>⚡ Response Time: Within 24 Hours</p>
-
-<p>🌎 Available Worldwide</p>
-
-<p>💼 Freelance & Business Projects Accepted</p>
-
-<p>🔒 Secure & Professional Service</p>
-
-</div>
-
-
-<!-- FORM -->
-
-<div class="card">
-
-<h3>Send Project Inquiry</h3>
-
-<form id="contactForm">
-
-<input type="text" id="name" placeholder="Your Name" required>
-
-<input type="email" id="email" placeholder="Your Email" required>
-
-<textarea id="message" placeholder="Tell us about your project" required></textarea>
-
-<button type="submit">
-Send Message
-</button>
-
-</form>
-
-<div class="success" id="successMsg">
-
-Message sent successfully. We will contact you soon.
+    <div class="success" id="successMsg">
+      ✅ Message sent successfully. We will contact you soon.
+    </div>
+  </div>
 
 </div>
-
-</div>
-
-
-</div>
-
 
 <!-- TRUST -->
-
 <div class="trust">
-
-<h3>Why Choose SnowSkye AI</h3>
-
-<p>
-
-✔ Professional website development  
-✔ AI chatbot integration  
-✔ Fast delivery  
-✔ Secure backend systems  
-✔ Trusted by business owners  
-
-</p>
-
+  <h3>Why Choose SnowSkye AI</h3>
+  <p>
+    ✔ Professional website development<br>
+    ✔ AI chatbot integration<br>
+    ✔ Fast delivery<br>
+    ✔ Secure backend systems<br>
+    ✔ Trusted by business owners
+  </p>
 </div>
 
-
 <!-- FOOTER -->
-
 <footer>
-
-© 2026 SnowSkye AI  
-Website Development & AI Automation Services
-
+  © 2026 SnowSkye AI<br>
+  Website Development & AI Automation Services
 </footer>
 
-
-<!-- SCRIPT -->
-
+<!-- ✅ FIXED & SECURE SCRIPT -->
 <script>
+const API_URL = "https://snowskye-web-app.onrender.com";
 
-const API_URL =
-"https://snowskye-web-app.onrender.com";
+const form = document.getElementById("contactForm");
+const successMsg = document.getElementById("successMsg");
+const sendBtn = document.getElementById("sendBtn");
 
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-document.getElementById("contactForm")
-.addEventListener("submit", async function(e){
+  const name = document.getElementById("name").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const message = document.getElementById("message").value.trim();
 
-e.preventDefault();
+  if(!name || !email || !message){
+    alert("Please fill in all fields.");
+    return;
+  }
 
-const name =
-document.getElementById("name").value;
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Sending...";
 
-const email =
-document.getElementById("email").value;
-
-const message =
-document.getElementById("message").value;
-
-const fullMessage = `
-NEW CLIENT INQUIRY
+  const fullMessage = `
+CONTACT FORM LEAD
 
 Name: ${name}
 Email: ${email}
-Project: ${message}
+
+Project:
+${message}
 `;
 
-await fetch(API_URL+"/lead",{
+  try{
+    const res = await fetch(API_URL + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        message: fullMessage,
+        source: "contact_page"
+      })
+    });
 
-method:"POST",
+    if(!res.ok) throw new Error("Server error");
 
-headers:{
-"Content-Type":"application/json"
-},
+    successMsg.style.display = "block";
+    form.reset();
 
-body:JSON.stringify({
-apiKey,
-message:fullMessage,
-time:new Date()
-})
-
+  }catch(err){
+    alert("Something went wrong. Please email snowskye16@gmail.com");
+    console.error(err);
+  }finally{
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send Message";
+  }
 });
-
-document.getElementById("successMsg").style.display="block";
-
-document.getElementById("contactForm").reset();
-
-});
-
 </script>
 
-
-<!-- CHATBOT -->
-
+<!-- CHATBOT WIDGET -->
 <script
   src="/widget.js"
   data-api-base="https://snowskye-web-app.onrender.com"
@@ -363,26 +280,6 @@ document.getElementById("contactForm").reset();
   data-logo="/icon-192.png"
   data-booking="https://calendly.com/dental"
 ></script>
-
-
-
-create key
-
-My Snow Skye website key.. sk-65aec011-51da-4f81-8a34-936f7b8cbb3e
-
-
-
-use  nodegeneratekey.js
-
-
-create key
-
-My Snow Skye website key.. sk-65aec011-51da-4f81-8a34-936f7b8cbb3e
-
-
-
-use  nodegeneratekey.js
-
 
 </body>
 </html>

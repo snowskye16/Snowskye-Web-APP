@@ -413,6 +413,12 @@
   const rememberEmail = document.getElementById("rememberEmail");
   const demoFill = document.getElementById("demoFill");
 
+  // ✅ API base (auto-detect same origin; override if needed)
+  const API_BASE = (window.__API_BASE__ || "").trim(); // optional global override
+  const LOGIN_URL = (API_BASE ? API_BASE.replace(/\/$/, "") : "") + "/api/admin/login";
+  const SESSION_CHECK_URL = (API_BASE ? API_BASE.replace(/\/$/, "") : "") + "/me"; // fallback
+  const DASHBOARD_URL = "/dashboard.html";
+
   // Load saved email
   try{
     const saved = localStorage.getItem("snowskye_admin_email") || "";
@@ -439,6 +445,16 @@
     btnSpin.style.display = v ? "inline-block" : "none";
   }
 
+  // ✅ Auto redirect if already logged in (best UX)
+  (async () => {
+    try{
+      const res = await fetch(SESSION_CHECK_URL, { credentials: "include" });
+      if(res.ok){
+        window.location.href = DASHBOARD_URL;
+      }
+    }catch{}
+  })();
+
   async function login(){
     const email = (emailEl.value || "").trim();
     const password = pwEl.value || "";
@@ -453,8 +469,8 @@
     setLoading(true);
 
     try{
-      // IMPORTANT: credentials include (session cookie)
-      const res = await fetch("/admin/login", {
+      // ✅ session cookie auth
+      const res = await fetch(LOGIN_URL, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -463,8 +479,7 @@
 
       const data = await res.json().catch(()=> ({}));
 
-      if(data && data.success){
-        // optional store email
+      if(res.ok && data && data.success){
         try{
           if(rememberEmail.checked){
             localStorage.setItem("snowskye_admin_email", email);
@@ -473,14 +488,14 @@
           }
         }catch{}
 
-        // your old code stores token; keep it (not required for session auth)
+        // not required, but safe to keep
         try{ localStorage.setItem("token", data.token || "session"); }catch{}
 
-        window.location.href = "/dashboard.html";
+        window.location.href = DASHBOARD_URL;
         return;
       }
 
-      errEl.textContent = "Invalid credentials. Try again.";
+      errEl.textContent = data?.message || "Invalid credentials. Try again.";
       setLoading(false);
     }catch(e){
       errEl.textContent = "Server error. Please try again.";
