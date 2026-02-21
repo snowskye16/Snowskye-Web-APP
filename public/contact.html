@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>Contact | SnowSkyeAI</title>
+<meta name="description" content="Contact SnowSkyeAI for AI chatbot installation, premium websites, and automation systems." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#020617;
+  --card:rgba(255,255,255,.06);
+  --stroke:rgba(255,255,255,.10);
+  --text:#eaf0ff;
+  --muted:#94a3b8;
+  --brand:#38bdf8;
+  --brand2:#a78bfa;
+  --good:#22c55e;
+  --bad:#fb7185;
+  --shadow: 0 20px 80px rgba(0,0,0,.55);
+  --r:18px;
+  --max:1180px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{
+  background: var(--bg);
+  color: var(--text);
+  line-height:1.6;
+  overflow-x:hidden;
+}
+a{text-decoration:none; color:inherit}
+button{cursor:pointer;border:none}
+
+.wrap{width:min(var(--max), calc(100% - 40px)); margin:0 auto;}
+
+.bg{
+  position:fixed; inset:0; z-index:-2;
+  background:
+    radial-gradient(900px 550px at 15% 10%, rgba(56,189,248,.18), transparent 60%),
+    radial-gradient(800px 500px at 85% 15%, rgba(167,139,250,.18), transparent 60%),
+    radial-gradient(900px 650px at 50% 95%, rgba(34,197,94,.10), transparent 60%),
+    linear-gradient(180deg, #020617 0%, #020617 100%);
+  filter:saturate(1.12);
+}
+.noise{
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
+  opacity:.06;
+  mix-blend-mode:overlay;
+}
+
+/* NAVBAR */
+.navbar{
+  position:sticky;
+  top:0;
+  z-index:1000;
+  backdrop-filter: blur(14px);
+  background: rgba(2,6,23,.55);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.nav-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 0;
+  gap:12px;
+}
+.brand{
+  display:flex; align-items:center; gap:10px;
+  font-weight:800;
+}
+.logo-badge{
+  width:40px; height:40px; border-radius:14px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(56,189,248,.95), transparent 55%),
+    radial-gradient(circle at 70% 75%, rgba(167,139,250,.85), transparent 55%),
+    linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow: 0 0 35px rgba(56,189,248,.22), 0 0 65px rgba(167,139,250,.18);
+}
+.brand small{display:block; color:var(--muted); font-weight:600; font-size:12px; margin-top:2px}
+.nav-links{display:flex; gap:18px; align-items:center;}
+.nav-links a{
+  color:var(--muted);
+  font-size:14px;
+  padding:8px 10px;
+  border-radius:12px;
+  transition:.2s ease;
+}
+.nav-links a:hover{color:var(--text); background:rgba(255,255,255,.06)}
+.right{display:flex; gap:10px; align-items:center}
+.btn{
+  padding:11px 14px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  font-weight:700;
+  font-size:14px;
+  transition:.2s ease;
+}
+.btn:hover{transform:translateY(-1px); background: rgba(255,255,255,.09);}
+.btn.primary{
+  background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(167,139,250,.22));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow: 0 0 35px rgba(56,189,248,.20), 0 0 55px rgba(167,139,250,.16);
+}
+
+/* HEADER */
+.header{
+  padding:70px 0 18px;
+  text-align:center;
+}
+.badge{
+  display:inline-flex; gap:8px; align-items:center;
+  padding:8px 12px;
+  border-radius:999px;
+  background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.10);
+  color:var(--muted);
+  font-size:13px;
+}
+.dot{
+  width:8px; height:8px; border-radius:99px;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  box-shadow: 0 0 18px rgba(56,189,248,.35);
+}
+.header h1{
+  font-size:44px;
+  margin-top:12px;
+  letter-spacing:-.7px;
+}
+.grad{
+  background: linear-gradient(90deg, var(--brand), var(--brand2));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.header p{
+  margin-top:10px;
+  color:var(--muted);
+  max-width:75ch;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* CONTENT */
+.section{padding:46px 0;}
+.grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:18px;
+  align-items:stretch;
+}
+.card{
+  background: rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius: var(--r);
+  padding:20px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.35);
+}
+.card h3{font-size:18px}
+.card p{color:var(--muted); margin-top:8px}
+.pills{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
+.pill{
+  display:inline-flex; gap:8px; align-items:center;
+  padding:8px 10px; border-radius:999px;
+  background: rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  color:var(--muted);
+  font-size:13px;
+}
+.check{
+  width:16px; height:16px; border-radius:5px;
+  background: rgba(34,197,94,.14);
+  border:1px solid rgba(34,197,94,.28);
+  display:grid; place-items:center;
+}
+.check svg{width:12px; height:12px}
+
+/* FORM */
+form{display:flex; flex-direction:column; gap:12px; margin-top:12px}
+.input{
+  padding:14px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.20);
+  color: var(--text);
+  outline:none;
+  font-size:14px;
+}
+textarea.input{min-height:140px; resize:vertical}
+.submit{
+  padding:14px 16px;
+  border-radius:16px;
+  font-weight:900;
+  background: linear-gradient(135deg, rgba(56,189,248,.85), rgba(167,139,250,.70));
+  color:#020617;
+  border:1px solid rgba(255,255,255,.14);
+  transition:.2s ease;
+}
+.submit:hover{transform:translateY(-1px); filter:brightness(1.05)}
+.small{
+  font-size:13px;
+  color:var(--muted);
+  margin-top:10px;
+  line-height:1.6;
+}
+
+/* Alerts */
+.alert{
+  margin-top:12px;
+  padding:12px 14px;
+  border-radius:14px;
+  display:none;
+  font-size:13.5px;
+  border:1px solid rgba(255,255,255,.12);
+}
+.alert.ok{
+  display:block;
+  background: rgba(34,197,94,.14);
+  border-color: rgba(34,197,94,.28);
+  color: #c8facc;
+}
+.alert.bad{
+  display:block;
+  background: rgba(251,113,133,.12);
+  border-color: rgba(251,113,133,.25);
+  color: #ffd0d8;
+}
+
+/* FOOTER */
+footer{
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:26px 0 40px;
+  color:var(--muted);
+  font-size:13px;
+  text-align:center;
+}
+
+/* Mobile */
+@media (max-width: 920px){
+  .grid{grid-template-columns:1fr}
+  .header h1{font-size:32px}
+  .nav-links{display:none}
+}
+</style>
+</head>
+
+<body>
+<div class="bg"></div>
+<div class="noise"></div>
+
+<!-- NAVBAR -->
+<header class="navbar">
+  <div class="wrap">
+    <div class="nav-row">
+      <a class="brand" href="index.html">
+        <div class="logo-badge" aria-hidden="true"></div>
+        <div>
+          <div>SnowSkyeAI</div>
+          <small>AI Chatbots • Websites • Automation</small>
+        </div>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="services.html">Services</a>
+        <a href="contact.html" style="color:var(--text)">Contact</a>
+      </nav>
+
+      <div class="right">
+        <a class="btn" href="services.html">View Services</a>
+        <a class="btn primary" href="mailto:snowskye.ai@gmail.com">Email Me</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- HEADER -->
+<section class="header">
+  <div class="wrap">
+    <div class="badge"><span class="dot"></span> Response within 24 hours • Live demo available</div>
+    <h1>Contact <span class="grad">SnowSkyeAI</span></h1>
+    <p>Get your AI chatbot or business website installed fast. Tell me what you want to build and I’ll reply with the best plan.</p>
+  </div>
+</section>
+
+<!-- CONTENT -->
+<section class="section">
+  <div class="wrap">
+    <div class="grid">
+
+      <!-- INFO -->
+      <div class="card">
+        <h3>Business Information</h3>
+        <p>📧 Email: <b>snowskye.ai@gmail.com</b></p>
+        <p>💼 Service: AI Chatbot & Website Development</p>
+        <p>⏱ Delivery Time: 24–48 Hours</p>
+        <p>🌐 Live Demo Available</p>
+
+        <div class="pills">
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Fast setup
+          </span>
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Mobile-ready
+          </span>
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Lead capture included
+          </span>
+        </div>
+
+        <p class="small" style="margin-top:14px;">
+          Tip: You can also click the chat icon (bottom-right) to message instantly.
+        </p>
+      </div>
+
+      <!-- FORM -->
+      <div class="card">
+        <h3>Send Message</h3>
+        <p>Share your project details and I’ll respond with the best plan and pricing.</p>
+
+        <form id="contactForm">
+          <input class="input" type="text" id="name" placeholder="Your Name" required />
+          <input class="input" type="email" id="email" placeholder="Your Email" required />
+          <textarea class="input" id="message" placeholder="Tell me about your project..." required></textarea>
+
+          <button class="submit" type="submit" id="sendBtn">Send Message</button>
+
+          <div class="alert ok" id="successMsg">✅ Message sent successfully! I will reply soon.</div>
+          <div class="alert bad" id="errorMsg">⚠️ Something went wrong. Please email me directly at snowskye.ai@gmail.com</div>
+
+          <div class="small">
+            By submitting, you agree to be contacted about your request. Please don’t include sensitive personal information.
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  SnowSkyeAI © 2026 • AI Chatbot & Website Developer
+</footer>
+
+<!-- CONTACT SCRIPT -->
+<script>
+  const API_URL = "https://snowskye-web-app.onrender.com";
+  // Keep this exactly as your backend expects:
+
+
+  const form = document.getElementById("contactForm");
+  const successMsg = document.getElementById("successMsg");
+  const errorMsg = document.getElementById("errorMsg");
+  const sendBtn = document.getElementById("sendBtn");
+
+  form.addEventListener("submit", async function(e){
+    e.preventDefault();
+    successMsg.style.display = "none";
+    errorMsg.style.display = "none";
+
+    const name = document.getElementById("name").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const message = document.getElementById("message").value.trim();
+
+    const fullMessage = `NEW CLIENT LEAD\n\nName: ${name}\nEmail: ${email}\nMessage: ${message}\n`;
+
+    try{
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending...";
+
+      const res = await fetch(API_URL + "/lead", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          apiKey,
+          message: fullMessage,
+          time: new Date().toISOString()
+        })
+      });
+
+      if(!res.ok) throw new Error("Bad response");
+
+      successMsg.style.display = "block";
+      form.reset();
+
+    }catch(err){
+      errorMsg.style.display = "block";
+    }finally{
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send Message";
+    }
+  });
+</script>
+
+<!-- CHATBOT WIDGET (FIXED: removed extra <) -->
+<script
+  src="/widget.js"
+  data-api-base="https://snowskye-web-app.onrender.com"
+  data-brand="SnowSkye AI"
+  data-color="#38bdf8"
+  data-logo="/icon-192.png"
+  data-booking="https://calendly.com/dental"
+></script>
+
+</body>
+</html>

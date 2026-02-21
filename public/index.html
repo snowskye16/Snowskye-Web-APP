@@ -1,856 +1,807 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>SnowSkye AI Premium</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#38bdf8">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<title>SnowSkyeAI | Premium AI Chatbots & Website Development</title>
+<meta name="description" content="SnowSkyeAI builds premium websites, AI chatbots, and automation systems that convert visitors into customers 24/7." />
+<meta name="theme-color" content="#020617" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
 <style>
 :root{
-  --bg0:#020617; --bg1:#0b1222;
-  --card: rgba(15,23,42,.72);
-  --card2: rgba(2,6,23,.45);
-  --line: rgba(255,255,255,.10);
-  --text:#e5e7eb; --muted:#94a3b8;
-  --brand:#38bdf8; --brand2:#6366f1;
-  --good:#22c55e; --warn:#fbbf24; --bad:#ef4444;
-  --shadow: 0 18px 60px rgba(0,0,0,.50);
-  --r: 22px;
+  --bg:#020617;
+  --bg2:#0b1224;
+  --card:rgba(255,255,255,.06);
+  --stroke:rgba(255,255,255,.10);
+  --muted:#94a3b8;
+  --text:#eaf0ff;
+  --brand:#38bdf8;
+  --brand2:#a78bfa;
+  --good:#22c55e;
+  --shadow: 0 20px 80px rgba(0,0,0,.55);
+  --r:18px;
+  --max:1180px;
 }
 
-*{box-sizing:border-box;font-family:Poppins,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+html,body{height:100%;}
 body{
-  margin:0; min-height:100vh; color:var(--text);
-  background:
-    radial-gradient(1200px 800px at 12% 10%, rgba(56,189,248,.18), transparent 55%),
-    radial-gradient(900px 700px at 90% 30%, rgba(99,102,241,.16), transparent 55%),
-    linear-gradient(135deg, var(--bg0), var(--bg1));
+  background: var(--bg);
+  color: var(--text);
+  line-height:1.6;
+  overflow-x:hidden;
 }
 
-/* Launcher */
-.launcher{
-  position:fixed; right:20px; bottom:20px;
-  z-index:9999; display:flex; align-items:center; gap:10px;
+.bg{
+  position:fixed; inset:0; z-index:-2;
+  background:
+    radial-gradient(900px 550px at 15% 10%, rgba(56,189,248,.18), transparent 60%),
+    radial-gradient(800px 500px at 85% 15%, rgba(167,139,250,.18), transparent 60%),
+    radial-gradient(900px 650px at 50% 95%, rgba(34,197,94,.10), transparent 60%),
+    linear-gradient(180deg, #020617 0%, #020617 100%);
+  filter:saturate(1.12);
+}
+.noise{
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
+  opacity:.06;
+  mix-blend-mode:overlay;
+}
+.wrap{width:min(var(--max), calc(100% - 40px)); margin:0 auto;}
+a{text-decoration:none; color:inherit}
+button{cursor:pointer}
+
+/* reveal */
+.reveal{opacity:0; transform: translateY(10px); transition: .6s ease;}
+.reveal.show{opacity:1; transform: translateY(0);}
+
+/* NAVBAR */
+.navbar{
+  position:sticky;
+  top:0;
+  z-index:1000;
+  backdrop-filter: blur(14px);
+  background: rgba(2,6,23,.55);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.nav-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 0;
+  gap:12px;
+}
+.brand{
+  display:flex; align-items:center; gap:10px;
+  font-weight:800;
+}
+.logo-badge{
+  width:40px; height:40px; border-radius:14px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(56,189,248,.95), transparent 55%),
+    radial-gradient(circle at 70% 75%, rgba(167,139,250,.85), transparent 55%),
+    linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.06));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow: 0 0 35px rgba(56,189,248,.22), 0 0 65px rgba(167,139,250,.18);
+}
+.brand small{display:block; color:var(--muted); font-weight:600; font-size:12px; margin-top:2px}
+.nav-links{
+  display:flex;
+  gap:18px;
+  align-items:center;
+}
+.nav-links a{
+  color:var(--muted);
+  font-size:14px;
+  padding:8px 10px;
+  border-radius:12px;
+  transition:.2s ease;
+}
+.nav-links a:hover{
+  color:var(--text);
+  background:rgba(255,255,255,.06);
+}
+.nav-cta{
+  display:flex; gap:10px; align-items:center;
+}
+.btn{
+  padding:11px 14px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  font-weight:800;
+  font-size:14px;
+  transition:.2s ease;
+}
+.btn:hover{transform:translateY(-1px); background: rgba(255,255,255,.09);}
+.btn:active{transform:translateY(0px) scale(.99);}
+.btn.primary{
+  background: linear-gradient(135deg, rgba(56,189,248,.22), rgba(167,139,250,.22));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow: 0 0 35px rgba(56,189,248,.20), 0 0 55px rgba(167,139,250,.16);
+}
+.hamburger{display:none}
+
+/* HERO */
+.hero{ padding:70px 0 24px; }
+.hero-grid{
+  display:grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap:22px;
+  align-items:stretch;
 }
 .badge{
-  display:none;
-  padding:8px 10px; border-radius:999px;
-  background: rgba(15,23,42,.62);
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  padding:8px 12px;
+  border-radius:999px;
+  background: rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.10);
-  box-shadow: var(--shadow);
-  font-size:12px; color:var(--muted);
+  color:var(--muted);
+  font-size:13px;
+  width:fit-content;
 }
-.floatBtn{
-  width:60px; height:60px; border-radius:20px;
-  border:none; cursor:pointer;
+.dot{
+  width:8px; height:8px; border-radius:99px;
   background: linear-gradient(135deg, var(--brand), var(--brand2));
-  box-shadow: 0 18px 55px rgba(56,189,248,.25);
-  color:#06111f; font-size:22px;
-  transition:.18s ease;
-  position:relative; overflow:hidden;
+  box-shadow: 0 0 18px rgba(56,189,248,.35);
 }
-.floatBtn:hover{ transform: translateY(-2px); }
-.floatBtn:active{ transform: translateY(0); }
-.floatBtn::after{
-  content:""; position:absolute; inset:-1px;
-  background: radial-gradient(240px 140px at 30% 10%, rgba(255,255,255,.25), transparent 55%);
-  pointer-events:none;
+h1{
+  font-size:56px;
+  line-height:1.05;
+  letter-spacing:-1px;
+  margin-top:12px;
 }
+.grad{
+  background: linear-gradient(90deg, var(--brand), var(--brand2));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.sub{
+  margin-top:14px;
+  color:var(--muted);
+  font-size:17px;
+  max-width:62ch;
+}
+.hero-actions{display:flex; gap:12px; margin-top:22px; flex-wrap:wrap}
+.hero-actions .btn{padding:13px 18px; border-radius:16px}
+.mini{
+  margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;
+  color:var(--muted); font-size:13px;
+}
+.pill{
+  display:inline-flex; gap:8px; align-items:center;
+  padding:8px 10px; border-radius:999px;
+  background: rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+}
+.check{
+  width:16px; height:16px; border-radius:5px;
+  background: rgba(34,197,94,.14);
+  border:1px solid rgba(34,197,94,.28);
+  display:grid; place-items:center;
+}
+.check svg{width:12px; height:12px}
 
-/* Chat Modal */
-.chat{
-  position:fixed; right:20px; bottom:94px;
-  width:390px; height:610px;
-  z-index:9999;
-  display:none; flex-direction:column;
-  background: var(--card);
+/* Hero Card */
+.hero-card{
+  background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));
   border:1px solid rgba(255,255,255,.12);
   border-radius: var(--r);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(16px);
+  padding:18px;
+  position:relative;
   overflow:hidden;
-  transform: translateY(12px);
-  opacity:0;
-  transition: .22s ease;
 }
-.chat.open{
-  display:flex;
-  transform: translateY(0);
-  opacity:1;
+.hero-card::before{
+  content:"";
+  position:absolute; inset:-60%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(56,189,248,.18), transparent 55%),
+    radial-gradient(circle at 70% 70%, rgba(167,139,250,.16), transparent 55%);
+  transform: rotate(18deg);
 }
-
-/* Header */
-.head{
-  padding:12px;
-  background: linear-gradient(135deg, rgba(56,189,248,.20), rgba(99,102,241,.16));
-  border-bottom:1px solid rgba(255,255,255,.10);
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
+.hero-card .content{position:relative}
+.kpis{
+  display:grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap:14px;
+  margin-top:12px;
 }
-.brandRow{ display:flex; align-items:center; gap:10px; min-width:0; }
-.logo{
-  width:36px;height:36px;border-radius:14px;
-  background: linear-gradient(135deg, var(--brand), var(--brand2));
-  box-shadow: 0 10px 30px rgba(56,189,248,.18);
-  flex:0 0 auto;
-}
-.title{ min-width:0; }
-.title b{
-  display:block; font-size:13.5px; letter-spacing:.2px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.title span{
-  display:flex; align-items:center; gap:6px;
-  color:var(--muted); font-size:11.5px; margin-top:2px;
-}
-.dot{
-  width:7px;height:7px;border-radius:50%;
-  background: var(--good);
-  box-shadow: 0 0 0 4px rgba(34,197,94,.12);
-}
-.actions{ display:flex; gap:8px; align-items:center; }
-.iconBtn{
-  border:none; cursor:pointer;
-  padding:9px 10px; border-radius:14px;
-  background: rgba(2,6,23,.30);
-  border:1px solid rgba(255,255,255,.10);
-  color:var(--text);
-  transition:.15s ease;
-}
-.iconBtn:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.25); }
-
-/* Tabs */
-.tabs{ display:flex; gap:8px; padding:10px 10px 0; }
-.tab{
-  flex:1; border:none; cursor:pointer;
-  padding:10px; border-radius:14px;
-  background: rgba(2,6,23,.25);
-  border:1px solid rgba(255,255,255,.08);
-  color:var(--muted);
-  transition:.15s ease;
-  font-size:12.5px;
-}
-.tab.active{
-  color:var(--text);
-  border-color: rgba(56,189,248,.35);
-  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
-}
-
-/* Quick actions */
-.quick{
-  padding:10px 10px 0;
-  display:flex; gap:8px; flex-wrap:wrap;
-}
-.pill{
-  border:none; cursor:pointer;
-  padding:10px 12px; border-radius:16px;
-  background: rgba(2,6,23,.25);
-  border:1px solid rgba(255,255,255,.10);
-  color:var(--muted);
-  transition:.15s ease;
-  font-size:12px;
-}
-.pill:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.22); color:var(--text); }
-.pill.primary{
-  background: rgba(56,189,248,.12);
-  border-color: rgba(56,189,248,.22);
-  color:var(--text);
-}
-
-/* Panels */
-.panel{ display:none; flex:1; overflow:hidden; }
-.panel.active{ display:flex; flex-direction:column; }
-
-/* Messages */
-.messages{
-  flex:1; padding:12px;
-  overflow:auto;
-  display:flex; flex-direction:column; gap:10px;
-}
-.bubble{
-  max-width:82%;
-  padding:10px 12px;
-  border-radius: 16px;
-  border:1px solid rgba(255,255,255,.10);
-  background: rgba(2,6,23,.35);
-  box-shadow: 0 10px 28px rgba(0,0,0,.25);
-  font-size:13px;
-  line-height:1.35;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.bubble.user{
-  margin-left:auto;
-  border-color: rgba(56,189,248,.25);
-  background: linear-gradient(135deg, rgba(56,189,248,.18), rgba(99,102,241,.12));
-}
-.bubble.bot{ margin-right:auto; }
-.meta{
-  margin-top:6px;
-  display:flex; justify-content:space-between; gap:10px;
-  font-size:11px; color:var(--muted);
-}
-
-/* typing */
-.typing{ display:inline-flex; gap:6px; align-items:center; }
-.dotty{
-  width:6px;height:6px;border-radius:50%;
-  background: rgba(229,231,235,.55);
-  animation:bop 1s infinite ease-in-out;
-}
-.dotty:nth-child(2){ animation-delay:.15s }
-.dotty:nth-child(3){ animation-delay:.30s }
-@keyframes bop{
-  0%,100%{ transform: translateY(0); opacity:.6 }
-  50%{ transform: translateY(-3px); opacity:1 }
-}
-
-/* Composer */
-.composer{
-  padding:10px;
-  border-top:1px solid rgba(255,255,255,.10);
-  background: rgba(2,6,23,.25);
-  display:flex; gap:8px; align-items:center;
-}
-.field{
-  flex:1; display:flex; align-items:center; gap:8px;
-  padding:10px 12px;
-  border-radius: 16px;
-  background: rgba(2,6,23,.30);
-  border:1px solid rgba(255,255,255,.10);
-}
-.field input{
-  width:100%; border:none; outline:none;
-  background:transparent; color:var(--text);
-  font-size:13px;
-}
-.sendBtn{
-  border:none; cursor:pointer;
-  padding:10px 14px; border-radius:16px;
-  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
-  border:1px solid rgba(56,189,248,.22);
-  color:var(--text);
-  transition:.15s ease;
-}
-.sendBtn:hover{ transform: translateY(-1px); border-color: rgba(56,189,248,.35); }
-.sendBtn.secondary{
-  background: rgba(2,6,23,.25);
-  border-color: rgba(255,255,255,.10);
-  color:var(--muted);
-}
-
-/* Activity */
-.activity{ padding:12px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
-.card{
-  border-radius: 16px;
-  border:1px solid rgba(255,255,255,.10);
-  background: rgba(2,6,23,.30);
-  padding:12px;
-}
-.card h4{ margin:0 0 8px; font-size:12.5px; letter-spacing:.2px; }
-.item{
-  padding:10px 10px;
+.kpi{
   border-radius:14px;
-  border:1px solid rgba(255,255,255,.07);
-  background: rgba(15,23,42,.35);
-  margin-top:8px;
-}
-.item b{ font-size:12px; }
-.item p{ margin:6px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
-.item small{ display:block; margin-top:6px; color: rgba(148,163,184,.85); font-size:11px; }
-
-.status{
-  display:inline-flex; gap:6px; align-items:center;
-  font-size:11.5px;
-  padding:6px 10px;
-  border-radius:999px;
   border:1px solid rgba(255,255,255,.10);
-  background: rgba(15,23,42,.35);
-  color: var(--muted);
-  margin-left:6px;
+  background: rgba(0,0,0,.18);
+  padding:14px;
 }
-.status.pending{ border-color: rgba(251,191,36,.25); background: rgba(251,191,36,.10); color:#fde68a; }
-.status.confirmed{ border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.10); color:#bbf7d0; }
-
-/* Booking Modal */
-.modalWrap{
-  position:absolute; inset:0;
-  display:none;
-  background: rgba(2,6,23,.55);
-  backdrop-filter: blur(8px);
-  z-index:10;
-  padding:12px;
-}
-.modalWrap.open{ display:flex; align-items:center; justify-content:center; }
-
-.modal{
-  width:100%;
-  border-radius: 20px;
-  background: rgba(15,23,42,.85);
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow: var(--shadow);
-  overflow:hidden;
-}
-.modalHead{
-  padding:12px;
-  display:flex; align-items:center; justify-content:space-between;
-  border-bottom:1px solid rgba(255,255,255,.10);
-  background: linear-gradient(135deg, rgba(56,189,248,.14), rgba(99,102,241,.10));
-}
-.modalHead b{ font-size:13px; }
-.modalBody{ padding:12px; display:grid; gap:10px; }
-.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-.f{
-  padding:10px 12px;
-  border-radius: 14px;
-  background: rgba(2,6,23,.35);
-  border:1px solid rgba(255,255,255,.12);
-}
-.f label{
-  display:block;
-  font-size:11px;
-  color: var(--muted);
-  margin-bottom:6px;
-}
-.f input, .f select, .f textarea{
-  width:100%;
-  border:none; outline:none;
-  background:transparent;
-  color:var(--text);
+.kpi b{font-size:22px}
+.kpi span{display:block; color:var(--muted); font-size:13px; margin-top:6px}
+.callout{
+  margin-top:14px;
+  border-radius:14px;
+  border:1px dashed rgba(255,255,255,.18);
+  padding:14px;
+  background: rgba(0,0,0,.16);
+  color:var(--muted);
   font-size:13px;
 }
-.f textarea{ resize:none; min-height:74px; }
 
-.modalFoot{
-  padding:12px;
-  display:flex; gap:8px; justify-content:flex-end;
-  border-top:1px solid rgba(255,255,255,.10);
+/* TRUST BAR */
+.trust{
+  margin-top:28px;
+  border-top:1px solid rgba(255,255,255,.08);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  background: rgba(2,6,23,.55);
 }
-.bigBtn{
-  border:none; cursor:pointer;
-  padding:10px 12px;
-  border-radius: 14px;
-  font-size:12.5px;
-  transition:.15s ease;
+.trust .wrap{
+  display:flex;
+  justify-content:center;
+  gap:18px;
+  flex-wrap:wrap;
+  padding:16px 0;
+  color:var(--muted);
+  font-size:13px;
 }
-.bigBtn.primary{
-  color:#06111f;
-  background: linear-gradient(135deg, var(--brand), var(--brand2));
-}
-.bigBtn.secondary{
-  background: rgba(2,6,23,.30);
-  border:1px solid rgba(255,255,255,.10);
-  color: var(--text);
-}
-.bigBtn:disabled{ opacity:.65; cursor:not-allowed; }
 
-/* Toast */
-.toast{
-  position:fixed;
-  right:20px; bottom:92px;
-  z-index:10000;
-  background: rgba(15,23,42,.92);
+/* SECTIONS */
+section{padding:54px 0}
+.section-head{
+  display:flex; justify-content:space-between; align-items:flex-end; gap:14px; flex-wrap:wrap;
+  margin-bottom:16px;
+}
+.section-head h2{font-size:30px; letter-spacing:-.4px;}
+.section-head p{color:var(--muted); max-width:70ch}
+
+/* CARDS */
+.grid{display:grid; gap:18px}
+.cards{grid-template-columns:repeat(3,1fr)}
+.card{
+  background: rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.10);
+  border-radius: var(--r);
+  padding:18px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.35);
+  transition:.22s ease;
+}
+.card:hover{
+  transform: translateY(-3px);
+  background: rgba(255,255,255,.07);
+  border-color: rgba(56,189,248,.30);
+}
+.icon{
+  width:44px; height:44px; border-radius:16px;
+  display:grid; place-items:center;
+  background: linear-gradient(135deg, rgba(56,189,248,.18), rgba(167,139,250,.16));
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow: 0 0 25px rgba(56,189,248,.16);
+  font-size:20px;
+}
+.card h3{margin-top:12px; font-size:18px}
+.card p{margin-top:8px; color:var(--muted); font-size:14px}
+
+/* PRICING */
+.pricing{grid-template-columns:repeat(3,1fr)}
+.price-card{
+  background: rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius: var(--r);
+  padding:20px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.35);
+}
+.price-card.featured{
+  background: linear-gradient(180deg, rgba(56,189,248,.10), rgba(167,139,250,.10));
+  border:1px solid rgba(255,255,255,.18);
+  box-shadow: var(--shadow), 0 0 45px rgba(56,189,248,.18);
+  transform: translateY(-2px);
+}
+.tag{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:7px 10px;
+  border-radius:999px;
+  background: rgba(0,0,0,.20);
+  border:1px solid rgba(255,255,255,.14);
+  color:var(--muted);
+  font-size:12px;
+  width:fit-content;
+}
+.price{
+  font-size:34px;
+  margin-top:12px;
+  font-weight:900;
+  letter-spacing:-.8px;
+}
+.price small{font-size:14px; color:var(--muted); font-weight:600}
+.list{margin-top:12px; color:var(--muted); font-size:13.5px; line-height:1.9; padding-left:16px}
+.list li{margin:4px 0}
+.full{width:100%}
+
+/* PORTFOLIO */
+.port-grid{grid-template-columns:repeat(3,1fr)}
+.mock{
   border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding:12px 14px;
-  max-width: 320px;
-  transform: translateY(16px);
-  opacity:0;
-  pointer-events:none;
-  transition:.2s ease;
+  border:1px solid rgba(255,255,255,.10);
+  background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));
+  padding:16px;
 }
-.toast.show{ opacity:1; transform: translateY(0); }
-.toast small{ display:block; margin-top:6px; color:var(--muted); }
+.mock .shot{
+  height:180px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(400px 240px at 30% 30%, rgba(56,189,248,.20), transparent 60%),
+    radial-gradient(420px 260px at 70% 70%, rgba(167,139,250,.18), transparent 60%),
+    rgba(0,0,0,.20);
+  margin-bottom:12px;
+}
+.mock b{display:block; margin-bottom:6px}
+.mock span{color:var(--muted); font-size:13px}
+
+/* TESTIMONIALS */
+.testimonials{grid-template-columns:repeat(3,1fr)}
+.quote{font-size:14.5px; line-height:1.7}
+.who{margin-top:12px; color:var(--muted); font-size:13px}
+
+/* FAQ */
+.faq{display:grid; gap:12px}
+.qa{
+  border-radius: var(--r);
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.05);
+  padding:16px;
+}
+.q{display:flex; justify-content:space-between; align-items:center; gap:12px}
+.q b{font-size:15px}
+.q button{
+  width:36px; height:36px; border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.18);
+  color:var(--text);
+}
+.a{margin-top:10px; color:var(--muted); display:none}
+.qa.open .a{display:block}
+
+/* CTA */
+.cta{ padding:0 0 54px; }
+.cta-box{
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(56,189,248,.85), rgba(14,165,233,.85));
+  color:#020617;
+  padding:42px;
+  box-shadow: 0 30px 90px rgba(0,0,0,.45);
+  position:relative;
+  overflow:hidden;
+}
+.cta-box::after{
+  content:"";
+  position:absolute; inset:-60%;
+  background: radial-gradient(circle at 20% 25%, rgba(255,255,255,.25), transparent 55%);
+  transform: rotate(12deg);
+}
+.cta-box .inner{position:relative}
+.cta-box h2{font-size:34px; letter-spacing:-.4px}
+.cta-box p{margin-top:8px; font-weight:600}
+
+/* Footer */
+footer{
+  border-top:1px solid rgba(255,255,255,.08);
+  padding:26px 0 40px;
+  color:var(--muted);
+  font-size:13px;
+}
+.footer-row{
+  display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+}
+
+/* Paypal Float */
+.paypal-float{
+  position:fixed;
+  bottom:20px;
+  left:20px;
+  background: linear-gradient(135deg, rgba(56,189,248,.95), rgba(167,139,250,.75));
+  color:#020617;
+  border:1px solid rgba(255,255,255,.16);
+  padding:13px 18px;
+  border-radius:999px;
+  font-weight:800;
+  cursor:pointer;
+  z-index:999;
+  box-shadow: 0 0 25px rgba(56,189,248,.25);
+}
 
 /* Mobile */
-@media (max-width: 430px){
-  .chat{ right:10px; left:10px; width:auto; }
-  .launcher{ right:10px; bottom:10px; }
-  .toast{ right:10px; left:10px; max-width:none; }
-  .grid2{ grid-template-columns: 1fr; }
+@media (max-width: 920px){
+  .hero-grid{grid-template-columns:1fr}
+  h1{font-size:40px}
+  .cards,.pricing,.testimonials,.port-grid{grid-template-columns:1fr}
+  .nav-links{display:none}
+  .hamburger{display:inline-flex}
+  .mobileMenu{display:none; padding:10px 0 16px}
+  .mobileMenu a{
+    display:block; padding:10px 0; color:var(--muted);
+    border-top:1px solid rgba(255,255,255,.08);
+  }
+  .mobileMenu a:hover{color:var(--text)}
+  .navbar.open .mobileMenu{display:block}
 }
 </style>
 </head>
 
 <body>
+<div class="bg"></div>
+<div class="noise"></div>
 
-<div class="launcher">
-  <div class="badge" id="badge">New</div>
-  <button class="floatBtn" id="openBtn" title="Open SnowSkye AI">💬</button>
-</div>
-
-<div class="chat" id="chat">
-
-  <!-- Booking Modal -->
-  <div class="modalWrap" id="bookModal">
-    <div class="modal">
-      <div class="modalHead">
-        <b>📅 Book a Consultation</b>
-        <button class="iconBtn" id="closeModalBtn" title="Close">✖</button>
-      </div>
-
-      <div class="modalBody">
-        <div class="grid2">
-          <div class="f">
-            <label>Your name</label>
-            <input id="bkName" placeholder="John / Chris" />
-          </div>
-
-          <div class="f">
-            <label>Email</label>
-            <input id="bkEmail" placeholder="you@email.com" />
-          </div>
+<header class="navbar" id="nav">
+  <div class="wrap">
+    <div class="nav-row">
+      <a class="brand" href="#home" aria-label="SnowSkyeAI home">
+        <div class="logo-badge" aria-hidden="true"></div>
+        <div>
+          <div>SnowSkyeAI</div>
+          <small>AI Chatbots • Websites • Automation</small>
         </div>
+      </a>
 
-        <div class="grid2">
-          <div class="f">
-            <label>Service</label>
-            <select id="bkService">
-              <option value="Website & AI Chatbot">Website & AI Chatbot</option>
-              <option value="AI Consultation">AI Consultation</option>
-              <option value="Marketing / Growth">Marketing / Growth</option>
-              <option value="Custom Build">Custom Build</option>
-            </select>
-          </div>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#services">Services</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#portfolio">Portfolio</a>
+        <a href="#proof">Proof</a>
+        <a href="#faq">FAQ</a>
+        <a href="#contact">Contact</a>
+      </nav>
 
-          <div class="f">
-            <label>Preferred date & time</label>
-            <input id="bkTime" placeholder="e.g. Feb 25, 3pm" />
-          </div>
-        </div>
-
-        <div class="f">
-          <label>Business / message</label>
-          <textarea id="bkMsg" placeholder="Tell us your business type + goal (sales, bookings, leads)."></textarea>
-        </div>
-
-        <div class="f">
-          <label>What happens next?</label>
-          <div style="color:var(--muted); font-size:12px; line-height:1.5;">
-            We’ll save your request. If your server is set with email confirmation, you’ll receive a confirmation link.
-          </div>
-        </div>
-      </div>
-
-      <div class="modalFoot">
-        <button class="bigBtn secondary" id="cancelBook">Cancel</button>
-        <button class="bigBtn primary" id="submitBook">Submit Booking</button>
+      <div class="nav-cta">
+        <a class="btn" href="#pricing">View Packages</a>
+        <a class="btn primary" href="#contact">Get Free Consultation</a>
+        <button class="btn hamburger" id="menuBtn" aria-label="Open menu">☰</button>
       </div>
     </div>
-  </div>
 
-  <!-- Header -->
-  <div class="head">
-    <div class="brandRow">
-      <div class="logo"></div>
-      <div class="title">
-        <b>SnowSkye AI</b>
-        <span><span class="dot" id="liveDot"></span><span id="liveText">Live</span></span>
-      </div>
-    </div>
-    <div class="actions">
-      <button class="iconBtn" id="soundBtn" title="Toggle voice">🔊</button>
-      <button class="iconBtn" id="closeBtn" title="Close">✖</button>
+    <div class="mobileMenu" id="mobileMenu">
+      <a href="#services">Services</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#portfolio">Portfolio</a>
+      <a href="#proof">Proof</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
     </div>
   </div>
+</header>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" data-tab="chatPanel">Chat</button>
-    <button class="tab" data-tab="activityPanel">Activity</button>
-  </div>
+<main id="home" class="hero">
+  <div class="wrap">
+    <div class="hero-grid reveal">
+      <div>
+        <div class="badge"><span class="dot"></span> Built for Clinics, Local Businesses & Online Brands</div>
+        <h1>Turn your website into a <span class="grad">24/7 sales machine</span>.</h1>
+        <p class="sub">
+          We build premium websites and AI chatbots that capture leads, answer customers instantly,
+          and help businesses grow—without hiring more staff.
+        </p>
 
-  <!-- Quick -->
-  <div class="quick">
-    <button class="pill primary" id="bookBtn">📅 Book Consultation</button>
-    <button class="pill primary" data-quick="I want a website for my business.">🚀 Get Website</button>
-    <button class="pill" data-quick="What is your pricing?">💰 Pricing</button>
-    <button class="pill" data-quick="Help me get more customers.">📈 Grow</button>
-    <button class="pill" id="emailHelpBtn">✉ Save my email</button>
-  </div>
+        <div class="hero-actions">
+          <button class="btn primary" onclick="scrollContact()">Get Free Consultation</button>
+          <button class="btn" onclick="scrollPricing()">View Pricing</button>
+          <a class="btn" href="https://calendly.com/dental" target="_blank" rel="noopener">Book a Call</a>
+        </div>
 
-  <!-- Chat Panel -->
-  <div class="panel active" id="chatPanel">
-    <div class="messages" id="messages"></div>
-
-    <div class="composer">
-      <div class="field">
-        <span style="color:var(--muted)">✍</span>
-        <input id="input" placeholder="Ask SnowSkye AI..." />
-      </div>
-      <button class="sendBtn" id="sendBtn">Send</button>
-      <button class="sendBtn secondary" id="micBtn" title="Voice input">🎤</button>
-    </div>
-  </div>
-
-  <!-- Activity Panel -->
-  <div class="panel" id="activityPanel">
-    <div class="activity">
-      <div class="card">
-        <h4>Recent Activity (Safe Preview)</h4>
-        <div id="activityList"></div>
-      </div>
-      <div class="card">
-        <h4>Fast Tip</h4>
-        <div class="item">
-          <b>Pro</b>
-          <p>Type your email anytime (example: you@email.com). SnowSkye will save it and follow up.</p>
-          <small>Privacy: widget never shows the real admin leads list.</small>
+        <div class="mini">
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Fast delivery • mobile-ready
+          </span>
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Lead capture + email alerts
+          </span>
+          <span class="pill">
+            <span class="check" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            Secure payments via PayPal
+          </span>
         </div>
       </div>
+
+      <aside class="hero-card">
+        <div class="content">
+          <div class="badge"><span class="dot"></span> What clients get</div>
+          <div class="kpis">
+            <div class="kpi"><b>24/7</b><span>Instant answers & support</span></div>
+            <div class="kpi"><b>+Leads</b><span>Capture inquiries automatically</span></div>
+            <div class="kpi"><b>Fast</b><span>Optimized for speed</span></div>
+            <div class="kpi"><b>Premium</b><span>Design that builds trust</span></div>
+          </div>
+          <div class="callout">
+            <b style="color:var(--text)">Best for:</b> Clinics • Real Estate • E-commerce • Local Services • Agencies
+          </div>
+        </div>
+      </aside>
     </div>
+  </div>
+</main>
+
+<div class="trust">
+  <div class="wrap">
+    <span>Secure Payments</span> •
+    <span>Trusted Service</span> •
+    <span>Professional Delivery</span> •
+    <span>PayPal Buyer Protection</span>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<section id="services" class="reveal">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Services</h2>
+        <p>Everything you need to look premium, automate support, and convert visitors into clients.</p>
+      </div>
+    </div>
+
+    <div class="grid cards">
+      <div class="card">
+        <div class="icon">🤖</div>
+        <h3>AI Chatbot Installation</h3>
+        <p>Automate responses and capture customer leads 24/7 using safe, structured flows.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">⚡</div>
+        <h3>Premium Website Development</h3>
+        <p>Modern, fast, mobile-friendly websites built to convert and build trust.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">🔁</div>
+        <h3>Automation Systems</h3>
+        <p>Lead capture, booking automation, and client follow-up systems to grow your revenue.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing" class="reveal">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Pricing Plans</h2>
+        <p>One-time payment. No monthly fees. Upgrade anytime.</p>
+      </div>
+    </div>
+
+    <div class="grid pricing">
+      <div class="price-card">
+        <div class="tag">Starter</div>
+        <div class="price">$100 <small>one-time</small></div>
+        <ul class="list">
+          <li>AI Chatbot Installation</li>
+          <li>Basic FAQ setup</li>
+          <li>Delivered in 24–48 hours</li>
+          <li>PayPal buyer protection</li>
+        </ul>
+        <a class="btn primary full" href="https://www.paypal.com/ncp/payment/U64JS55JSGEY2" target="_blank" rel="noopener">Pay Securely with PayPal</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="tag">Most Popular</div>
+        <div class="price">$300 <small>one-time</small></div>
+        <ul class="list">
+          <li>Business Website + AI Chatbot</li>
+          <li>Lead automation system</li>
+          <li>Better design + trust sections</li>
+          <li>Priority support</li>
+        </ul>
+        <a class="btn primary full" href="https://www.paypal.com/ncp/payment/Y6NSF2XGBEZZ8" target="_blank" rel="noopener">Pay Securely with PayPal</a>
+      </div>
+
+      <div class="price-card">
+        <div class="tag">Premium</div>
+        <div class="price">$500 <small>one-time</small></div>
+        <ul class="list">
+          <li>Website + chatbot + automation</li>
+          <li>Lead capture + follow-up flow</li>
+          <li>Priority delivery</li>
+          <li>Best for clinics & teams</li>
+        </ul>
+        <a class="btn primary full" href="https://www.paypal.com/ncp/payment/QRDTHTD27GVWS" target="_blank" rel="noopener">Pay Securely with PayPal</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="portfolio" class="reveal">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Portfolio</h2>
+        <p>Replace these with screenshots of your real projects when ready.</p>
+      </div>
+    </div>
+
+    <div class="grid port-grid">
+      <div class="mock">
+        <div class="shot"></div>
+        <b>Clinic Website + Booking</b>
+        <span>Premium homepage + contact + booking integration.</span>
+      </div>
+      <div class="mock">
+        <div class="shot"></div>
+        <b>AI Chatbot Lead Capture</b>
+        <span>24/7 support + leads saved to backend.</span>
+      </div>
+      <div class="mock">
+        <div class="shot"></div>
+        <b>Business Landing Page</b>
+        <span>High-converting layout + trust + pricing.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="proof" class="reveal">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Proof & Trust</h2>
+        <p>Clients buy faster when your website looks premium and answers questions instantly.</p>
+      </div>
+    </div>
+
+    <div class="grid testimonials">
+      <div class="card">
+        <div class="quote">“The website looks premium and we started getting more inquiries after adding the chatbot.”</div>
+        <div class="who">— Service Business Owner</div>
+      </div>
+      <div class="card">
+        <div class="quote">“Fast delivery, clean design, and the chatbot captures leads even after hours.”</div>
+        <div class="who">— Local Clinic Team</div>
+      </div>
+      <div class="card">
+        <div class="quote">“The automation system saved us time. Customers get answers instantly.”</div>
+        <div class="who">— Agency Client</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="reveal">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>FAQ</h2>
+        <p>Quick answers that remove doubts and increase conversions.</p>
+      </div>
+    </div>
+
+    <div class="faq">
+      <div class="qa">
+        <div class="q">
+          <b>How fast can you deliver?</b>
+          <button type="button" class="toggle" aria-label="Toggle answer">+</button>
+        </div>
+        <div class="a">Starter chatbot setups are usually 24–48 hours. Websites depend on content, but we can launch a strong version fast and improve after.</div>
+      </div>
+
+      <div class="qa">
+        <div class="q">
+          <b>Do you offer support after delivery?</b>
+          <button type="button" class="toggle" aria-label="Toggle answer">+</button>
+        </div>
+        <div class="a">Yes. I can provide updates, improvements, and maintenance if you want ongoing help.</div>
+      </div>
+
+      <div class="qa">
+        <div class="q">
+          <b>Is this safe for clinics?</b>
+          <button type="button" class="toggle" aria-label="Toggle answer">+</button>
+        </div>
+        <div class="a">Yes. For healthcare use, the chatbot can provide general information and assist with booking or inquiries. It does not provide diagnosis or treatment advice.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta" id="contact">
+  <div class="wrap">
+    <div class="cta-box">
+      <div class="inner">
+        <h2>Start Your Project Today</h2>
+        <p>Email: <b>snowskye.ai@gmail.com</b></p>
+        <p>Response within 24 hours</p>
+        <br />
+        <a class="btn primary" href="https://paypal.me/SnowskyeAI" target="_blank" rel="noopener">Secure Your Slot Now</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-row">
+      <div>© <span id="year"></span> SnowSkyeAI • Premium AI Chatbot & Website Development</div>
+      <div style="display:flex; gap:14px; flex-wrap:wrap">
+        <a href="#pricing">Packages</a>
+        <a href="#contact">Contact</a>
+        <a href="#home">Back to top ↑</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<a href="https://paypal.me/SnowskyeAI" target="_blank" rel="noopener">
+  <button class="paypal-float">Pay Securely</button>
+</a>
 
 <script>
-const API="/chat";
-const ACTIVITY_API="/api/public/recent";
+  document.getElementById("year").textContent = new Date().getFullYear();
 
-const chat = document.getElementById("chat");
-const openBtn = document.getElementById("openBtn");
-const closeBtn = document.getElementById("closeBtn");
-
-const soundBtn = document.getElementById("soundBtn");
-const liveDot = document.getElementById("liveDot");
-const liveText = document.getElementById("liveText");
-
-const messages = document.getElementById("messages");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
-const micBtn = document.getElementById("micBtn");
-
-const badge = document.getElementById("badge");
-const toastEl = document.getElementById("toast");
-
-const activityList = document.getElementById("activityList");
-const emailHelpBtn = document.getElementById("emailHelpBtn");
-
-// Booking modal elements
-const bookBtn = document.getElementById("bookBtn");
-const bookModal = document.getElementById("bookModal");
-const closeModalBtn = document.getElementById("closeModalBtn");
-const cancelBook = document.getElementById("cancelBook");
-const submitBook = document.getElementById("submitBook");
-
-const bkName = document.getElementById("bkName");
-const bkEmail = document.getElementById("bkEmail");
-const bkService = document.getElementById("bkService");
-const bkTime = document.getElementById("bkTime");
-const bkMsg = document.getElementById("bkMsg");
-
-let voiceOn=true;
-let typingEl=null;
-
-function showToast(msg, sub=""){
-  toastEl.innerHTML = `<div>${msg}</div>${sub ? `<small>${sub}</small>` : ""}`;
-  toastEl.classList.add("show");
-  setTimeout(()=>toastEl.classList.remove("show"), 2500);
-}
-
-function openChat(){
-  chat.classList.add("open");
-  badge.style.display="none";
-  input.focus();
-  loadActivity();
-}
-function closeChatUI(){ chat.classList.remove("open"); }
-
-openBtn.onclick = () => chat.classList.contains("open") ? closeChatUI() : openChat();
-closeBtn.onclick = closeChatUI;
-
-soundBtn.onclick = () => {
-  voiceOn = !voiceOn;
-  soundBtn.textContent = voiceOn ? "🔊" : "🔇";
-};
-
-document.querySelectorAll(".tab").forEach(t=>{
-  t.onclick=()=>{
-    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
-    t.classList.add("active");
-
-    const target = t.dataset.tab;
-    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
-    document.getElementById(target).classList.add("active");
-
-    if(target==="activityPanel") loadActivity();
-    if(target==="chatPanel") input.focus();
-  };
-});
-
-document.querySelectorAll("[data-quick]").forEach(b=>{
-  b.onclick=()=>{
-    input.value = b.getAttribute("data-quick");
-    send();
-  };
-});
-
-emailHelpBtn.onclick=()=>{
-  addBubble("Type your email here (example: you@email.com). I will save it for follow-up.", "bot");
-  speak("Type your email here. I will save it for follow up.");
-  input.focus();
-};
-
-// Booking modal open/close
-function openBooking(){
-  bookModal.classList.add("open");
-  // optionally prefill email if user typed it earlier
-  setTimeout(()=>bkName.focus(), 60);
-}
-function closeBooking(){
-  bookModal.classList.remove("open");
-}
-bookBtn.onclick = openBooking;
-closeModalBtn.onclick = closeBooking;
-cancelBook.onclick = closeBooking;
-
-// Helpers
-function nowTime(){
-  return new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-}
-
-function addBubble(text, who="bot"){
-  const wrap=document.createElement("div");
-  wrap.className="bubble "+who;
-
-  const msg=document.createElement("div");
-  msg.textContent=text;
-
-  const meta=document.createElement("div");
-  meta.className="meta";
-  meta.innerHTML=`<span>${who==="user"?"You":"SnowSkye AI"}</span><span>${nowTime()}</span>`;
-
-  wrap.appendChild(msg);
-  wrap.appendChild(meta);
-
-  messages.appendChild(wrap);
-  messages.scrollTop=messages.scrollHeight;
-}
-
-function showTyping(){
-  if(typingEl) return;
-  typingEl=document.createElement("div");
-  typingEl.className="bubble bot";
-  typingEl.innerHTML=`
-    <div class="typing"><span class="dotty"></span><span class="dotty"></span><span class="dotty"></span></div>
-    <div class="meta"><span>SnowSkye AI</span><span>${nowTime()}</span></div>
-  `;
-  messages.appendChild(typingEl);
-  messages.scrollTop=messages.scrollHeight;
-}
-function hideTyping(){
-  if(typingEl){ typingEl.remove(); typingEl=null; }
-}
-
-function speak(text){
-  if(!voiceOn) return;
-  try{
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang="en-US";
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }catch{}
-}
-
-function detectEmail(text){
-  const r = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
-  const m = String(text||"").match(r);
-  return m ? m[0] : "";
-}
-
-// Send chat
-async function send(){
-  const text=(input.value||"").trim();
-  if(!text) return;
-
-  addBubble(text,"user");
-  input.value="";
-
-  const maybeEmail = detectEmail(text);
-  if(maybeEmail){
-    showToast("Email detected ✅", maybeEmail);
+  function scrollContact(){
+    document.getElementById("contact").scrollIntoView({behavior:"smooth"});
+  }
+  function scrollPricing(){
+    document.getElementById("pricing").scrollIntoView({behavior:"smooth"});
   }
 
-  showTyping();
+  // Mobile menu
+  const nav = document.getElementById("nav");
+  const menuBtn = document.getElementById("menuBtn");
+  menuBtn?.addEventListener("click", () => nav.classList.toggle("open"));
+  document.querySelectorAll("#mobileMenu a").forEach(a=>{
+    a.addEventListener("click", ()=>nav.classList.remove("open"));
+  });
 
-  try{
-    const res=await fetch(API,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({message:text})
+  // FAQ toggles
+  document.querySelectorAll(".qa .toggle").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const qa = btn.closest(".qa");
+      qa.classList.toggle("open");
+      btn.textContent = qa.classList.contains("open") ? "–" : "+";
     });
+  });
 
-    const data=await res.json().catch(()=>({}));
-    hideTyping();
-
-    const reply = data.reply || "Sorry, I couldn't respond right now.";
-    addBubble(reply,"bot");
-    speak(reply);
-
-    badge.style.display="inline-flex";
-    badge.textContent="Updated";
-  }catch(e){
-    hideTyping();
-    addBubble("Server error. Please try again.", "bot");
-    liveDot.style.background="var(--bad)";
-    liveText.textContent="Offline";
-  }
-}
-
-sendBtn.onclick=send;
-input.addEventListener("keydown",(e)=>{ if(e.key==="Enter") send(); });
-
-// Voice input
-micBtn.onclick=()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ addBubble("Voice input not supported on this browser.","bot"); return; }
-  const rec=new SR();
-  rec.lang="en-US";
-  rec.start();
-  rec.onresult=(e)=>{ input.value=e.results[0][0].transcript; send(); };
-};
-
-// Submit Booking (sends to /chat with structured message + email)
-submitBook.onclick = async () => {
-  const name = (bkName.value || "").trim();
-  const email = (bkEmail.value || "").trim();
-  const service = (bkService.value || "").trim();
-  const time = (bkTime.value || "").trim();
-  const msg = (bkMsg.value || "").trim();
-
-  if(!email){
-    showToast("Email required", "Please enter your email to book.");
-    return;
-  }
-
-  submitBook.disabled = true;
-  submitBook.textContent = "Submitting...";
-
-  const bookingMessage =
-`BOOKING REQUEST
-Name: ${name || "(not provided)"}
-Email: ${email}
-Service: ${service || "(not provided)"}
-Preferred time: ${time || "(not provided)"}
-Message: ${msg || "(none)"}
-`;
-
-  // Put it into chat UI as if user sent it
-  closeBooking();
-  addBubble("📅 Booking request sent.\n" + bookingMessage, "user");
-  showTyping();
-
-  try{
-    const res = await fetch(API, {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        message: bookingMessage,
-        email: email
-      })
+  // Smooth scroll for anchor clicks
+  document.querySelectorAll('a[href^="#"]').forEach(a=>{
+    a.addEventListener("click", (e)=>{
+      const href = a.getAttribute("href");
+      const el = document.querySelector(href);
+      if(!el) return;
+      e.preventDefault();
+      el.scrollIntoView({behavior:"smooth", block:"start"});
     });
+  });
 
-    const data = await res.json().catch(()=>({}));
-    hideTyping();
-
-    const reply = data.reply || "Booking sent. We'll contact you soon.";
-    addBubble(reply, "bot");
-    speak(reply);
-
-    showToast("Booking submitted ✅", "Check your email if confirmation is enabled.");
-    badge.style.display="inline-flex";
-    badge.textContent="Booked";
-
-    // reset form
-    bkName.value = "";
-    bkEmail.value = "";
-    bkTime.value = "";
-    bkMsg.value = "";
-  }catch(e){
-    hideTyping();
-    addBubble("Booking failed. Please try again.", "bot");
-    showToast("Failed ❌", "Server error while submitting booking.");
-  }finally{
-    submitBook.disabled = false;
-    submitBook.textContent = "Submit Booking";
-  }
-};
-
-// Activity
-function statusChip(status){
-  const s=(status||"pending").toLowerCase();
-  if(s==="confirmed") return `<span class="status confirmed">● confirmed</span>`;
-  return `<span class="status pending">● pending</span>`;
-}
-
-async function loadActivity(){
-  try{
-    liveDot.style.background="var(--warn)";
-    liveText.textContent="Syncing…";
-
-    const res=await fetch(ACTIVITY_API);
-    const data=await res.json().catch(()=>({}));
-
-    const leads=Array.isArray(data.leads)?data.leads:[];
-    const apps=Array.isArray(data.appointments)?data.appointments:[];
-
-    activityList.innerHTML="";
-
-    if(!leads.length && !apps.length){
-      activityList.innerHTML=`<div class="item"><b>No activity yet</b><p>Once users chat, you’ll see a safe preview here.</p></div>`;
-    }
-
-    leads.slice(0,6).forEach(l=>{
-      const div=document.createElement("div");
-      div.className="item";
-      div.innerHTML=`
-        <b>Lead</b>
-        <p>${l.message || "(no message)"}</p>
-        <small>${new Date(l.time).toLocaleString()}</small>
-      `;
-      activityList.appendChild(div);
+  // Reveal on scroll
+  const els = document.querySelectorAll(".reveal");
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(en=>{
+      if(en.isIntersecting) en.target.classList.add("show");
     });
-
-    apps.slice(0,6).forEach(a=>{
-      const div=document.createElement("div");
-      div.className="item";
-      div.innerHTML=`
-        <b>Appointment</b> ${statusChip(a.status)}
-        <p>${a.message || "(no message)"}</p>
-        <small>${new Date(a.created).toLocaleString()}</small>
-      `;
-      activityList.appendChild(div);
-    });
-
-    liveDot.style.background="var(--good)";
-    liveText.textContent="Live";
-  }catch(e){
-    console.error(e);
-    liveDot.style.background="var(--bad)";
-    liveText.textContent="Offline";
-    activityList.innerHTML=`<div class="item"><b>Unable to load</b><p>Check /api/public/recent</p></div>`;
-  }
-}
-
-// Welcome
-setTimeout(()=>{
-  addBubble("Hi, I’m SnowSkye AI. Tell me your business type + your goal, and I’ll help you grow fast.", "bot");
-  speak("Hi, I’m SnowSkye AI. Tell me your business type and your goal, and I’ll help you grow fast.");
-  badge.style.display="inline-flex";
-  badge.textContent="New";
-}, 650);
+  }, {threshold: 0.12});
+  els.forEach(el=>io.observe(el));
 </script>
 
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(()=>{});
-}
-</script>
+<!-- ✅ INSTALL PREMIUM WIDGET (YOUR OWN RENDER) -->
+<script
+  src="/widget.js"
+  data-api-base="https://snowskye-web-app.onrender.com"
+  data-brand="SnowSkye AI"
+  data-color="#38bdf8"
+  data-logo="/icon-192.png"
+  data-booking="https://calendly.com/dental"
+></script>
 
 </body>
 </html>

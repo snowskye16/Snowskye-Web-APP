@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Start Your Project | SnowSkye AI</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:'Poppins',sans-serif;
+}
+
+body{
+background:#f4f7fb;
+color:#1a1a1a;
+}
+
+/* NAVBAR */
+
+.navbar{
+background:white;
+padding:18px 40px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+box-shadow:0 4px 20px rgba(0,0,0,0.08);
+}
+
+.logo{
+font-weight:700;
+font-size:24px;
+color:#0077ff;
+}
+
+.nav-links a{
+margin-left:25px;
+text-decoration:none;
+color:#333;
+font-weight:500;
+}
+
+/* CONTAINER */
+
+.container{
+max-width:650px;
+margin:80px auto;
+background:white;
+padding:40px;
+border-radius:15px;
+box-shadow:0 10px 30px rgba(0,0,0,0.08);
+}
+
+.container h1{
+margin-bottom:10px;
+color:#0077ff;
+}
+
+.container p{
+margin-bottom:25px;
+color:#555;
+}
+
+/* FORM */
+
+form{
+display:flex;
+flex-direction:column;
+gap:15px;
+}
+
+input, select, textarea{
+
+padding:14px;
+border-radius:8px;
+border:1px solid #ccc;
+font-size:15px;
+
+}
+
+button{
+
+padding:15px;
+border:none;
+border-radius:30px;
+background:linear-gradient(45deg,#0077ff,#00c6ff);
+color:white;
+font-size:16px;
+font-weight:600;
+cursor:pointer;
+
+}
+
+button:hover{
+opacity:.95;
+}
+
+.success{
+
+background:#d4edda;
+color:#155724;
+padding:15px;
+border-radius:10px;
+margin-top:15px;
+display:none;
+
+}
+
+/* FOOTER */
+
+footer{
+text-align:center;
+padding:30px;
+margin-top:40px;
+background:#0a0a0a;
+color:white;
+}
+
+/* MOBILE */
+
+@media(max-width:768px){
+
+.navbar{
+padding:15px 20px;
+}
+
+.container{
+margin:40px 15px;
+padding:25px;
+}
+
+}
+
+</style>
+
+</head>
+<body>
+
+
+<!-- NAVBAR -->
+
+<div class="navbar">
+
+<div class="logo">SnowSkye AI</div>
+
+<div class="nav-links">
+
+<a href="index.html">Home</a>
+<a href="services.html">Services</a>
+<a href="contact.html">Contact</a>
+
+</div>
+
+</div>
+
+
+<!-- PROJECT FORM -->
+
+<div class="container">
+
+<h1>Start Your Project</h1>
+
+<p>
+Request your AI chatbot or business website. Delivery in 24–48 hours.
+</p>
+
+<form id="projectForm">
+
+<input type="text" id="name" placeholder="Your Name" required>
+
+<input type="email" id="email" placeholder="Your Email" required>
+
+<input type="tel" id="phone" placeholder="Phone or WhatsApp" required>
+
+<select id="service" required>
+
+<option value="">Select Service</option>
+
+<option>AI Chatbot Installation ($75)</option>
+
+<option>Business Website Development ($150)</option>
+
+<option>Website + AI Chatbot Package ($250)</option>
+
+<option>Custom Project</option>
+
+</select>
+
+<input type="text" id="website" placeholder="Your Website URL (if any)">
+
+<textarea id="message" placeholder="Tell me about your project..."></textarea>
+
+<button type="submit">
+Submit Request
+</button>
+
+</form>
+
+<div class="success" id="successMsg">
+✅ Request sent successfully! I will contact you soon.
+</div>
+
+</div>
+
+
+<footer>
+
+SnowSkye AI © 2026<br>
+AI Chatbot & Website Developer
+
+</footer>
+
+
+<!-- SCRIPT -->
+
+<script>
+
+const API_URL =
+"https://snowskye-web-app.onrender.com";
+
+const apiKey =
+"";
+
+
+document.getElementById("projectForm")
+.addEventListener("submit", async function(e){
+
+e.preventDefault();
+
+const name =
+document.getElementById("name").value;
+
+const email =
+document.getElementById("email").value;
+
+const phone =
+document.getElementById("phone").value;
+
+const service =
+document.getElementById("service").value;
+
+const website =
+document.getElementById("website").value;
+
+const message =
+document.getElementById("message").value;
+
+
+const fullMessage = `
+
+NEW CLIENT PROJECT REQUEST
+
+Name: ${name}
+Email: ${email}
+Phone: ${phone}
+Service: ${service}
+Website: ${website}
+Message: ${message}
+
+`;
+
+await fetch(API_URL+"/lead",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+
+apiKey:apiKey,
+message:fullMessage,
+time:new Date()
+
+})
+
+});
+
+
+document.getElementById("successMsg").style.display="block";
+
+document.getElementById("projectForm").reset();
+
+});
+
+</script>
+
+
+<!-- CHATBOT -->
+
+<script
+  src="/widget.js"
+  data-api-base="https://snowskye-web-app.onrender.com"
+  data-brand="SnowSkye AI"
+  data-color="#38bdf8"
+  data-logo="/icon-192.png"
+  data-booking="https://calendly.com/dental"
+></script>
+
+
+
+create key
+
+My Snow Skye website key.. sk-65aec011-51da-4f81-8a34-936f7b8cbb3e
+
+
+
+use  nodegeneratekey.js
+
+
+
+
+
+</body>
+</html>
