@@ -64,7 +64,7 @@ app.set("trust proxy", 1);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: false, // ✅ allow inline scripts in your HTML
+    contentSecurityPolicy: false,
   })
 );
 
@@ -106,6 +106,15 @@ app.use(
 );
 
 /* =========================
+   STATIC FILES (PUBLIC)
+   ✅ This enables:
+   - /widget.js
+   - /logo.png
+   - /index.html
+========================= */
+app.use(express.static(path.join(__dirname, "public")));
+
+/* =========================
    SAFE FILE FUNCTIONS
 ========================= */
 function ensureDataDir() {
@@ -122,9 +131,7 @@ function read(file) {
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     const backup = `${file}.corrupt.${Date.now()}.bak`;
-    try {
-      fs.copyFileSync(file, backup);
-    } catch (_) {}
+    try { fs.copyFileSync(file, backup); } catch (_) {}
     fs.writeFileSync(file, "[]", "utf8");
     return [];
   }
@@ -191,11 +198,6 @@ Responsibilities:
 - Provide support
 - Convert visitors into patients
 
-Services:
-• Dental Cleaning
-• AI Consultation
-• Premium Clinic Services
-
 Rules:
 - Be professional, friendly, helpful
 - If user wants to book: ask for name, service, preferred date/time, and email (if not provided)
@@ -208,64 +210,29 @@ ${message}
 }
 
 /* =========================
-   PAGES (PROTECTED)
-   IMPORTANT: define BEFORE static()
+   BASIC ROUTES
 ========================= */
-
-// Home page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Protect dashboard page
-app.get("/dashboard.html", (req, res) => {
-  if (!req.session.user) return res.redirect("/login.html");
-  return res.sendFile(path.join(__dirname, "public", "dashboard.html"));
-});
-
-// Optional: protect any other admin pages
-// app.get("/admin.html", (req,res)=>{ ... })
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 /* =========================
-   STATIC FILES (PUBLIC)
-========================= */
-app.use(express.static(path.join(__dirname, "public")));
-
-/* =========================
-   REGISTER ADMIN
+   REGISTER / LOGIN
 ========================= */
 app.post("/register", async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
 
-    if (!email || !password) {
-      return res.json({ success: false, message: "Email and password required" });
-    }
-
-    if (!isValidEmail(email)) {
-      return res.json({ success: false, message: "Invalid email" });
-    }
-
-    if (password.length < 6) {
-      return res.json({ success: false, message: "Password must be at least 6 characters" });
-    }
+    if (!email || !password) return res.json({ success: false, message: "Email and password required" });
+    if (!isValidEmail(email)) return res.json({ success: false, message: "Invalid email" });
+    if (password.length < 6) return res.json({ success: false, message: "Password must be at least 6 characters" });
 
     const users = read(USERS_FILE);
-    const exists = users.find((u) => u.email === email);
-    if (exists) return res.json({ success: false, message: "User exists" });
+    if (users.find((u) => u.email === email)) return res.json({ success: false, message: "User exists" });
 
     const hashed = await bcrypt.hash(password, 10);
-
-    users.push({
-      id: uuidv4(),
-      email,
-      password: hashed,
-      role: "admin",
-      created: new Date().toISOString(),
-    });
-
+    users.push({ id: uuidv4(), email, password: hashed, role: "admin", created: new Date().toISOString() });
     write(USERS_FILE, users);
+
     res.json({ success: true });
   } catch (e) {
     console.error(e);
@@ -273,9 +240,6 @@ app.post("/register", async (req, res) => {
   }
 });
 
-/* =========================
-   LOGIN (SESSION)
-========================= */
 app.post("/login", async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
@@ -296,10 +260,6 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/* =========================
-   ADMIN LOGIN ALIAS (MATCHES YOUR login.html)
-   Your login.html calls /admin/login
-========================= */
 app.post("/admin/login", async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
@@ -313,8 +273,6 @@ app.post("/admin/login", async (req, res) => {
     if (!valid) return res.json({ success: false });
 
     req.session.user = { id: user.id, email: user.email, role: user.role };
-
-    // Your login.html expects data.token; we can return any string (session cookie is the real auth)
     res.json({ success: true, token: "session" });
   } catch (e) {
     console.error(e);
@@ -322,43 +280,31 @@ app.post("/admin/login", async (req, res) => {
   }
 });
 
-/* =========================
-   LOGOUT
-========================= */
 app.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
-/* =========================
-   CURRENT USER
-========================= */
 app.get("/me", (req, res) => {
   if (req.session.user) return res.json(req.session.user);
   res.status(401).json({ error: "Not logged in" });
 });
 
 /* =========================
-   APPOINTMENT CONFIRM (EMAIL LINK)
+   APPOINTMENT CONFIRM
 ========================= */
 app.get("/api/appointments/confirm", (req, res) => {
   const appointmentId = String(req.query.appointmentId || "");
   const token = String(req.query.token || "");
 
-  if (!appointmentId || !token) {
-    return res.status(400).json({ success: false, message: "Missing appointmentId or token" });
-  }
+  if (!appointmentId || !token) return res.status(400).json({ success: false, message: "Missing params" });
 
   const appointments = read(APPOINTMENTS_FILE);
   const idx = appointments.findIndex((a) => a.id === appointmentId);
 
-  if (idx === -1) {
-    return res.status(404).json({ success: false, message: "Appointment not found" });
-  }
+  if (idx === -1) return res.status(404).json({ success: false, message: "Appointment not found" });
 
   const appt = appointments[idx];
-  if (appt.confirmToken !== token) {
-    return res.status(401).json({ success: false, message: "Invalid token" });
-  }
+  if (appt.confirmToken !== token) return res.status(401).json({ success: false, message: "Invalid token" });
 
   appt.status = "confirmed";
   appt.confirmedAt = new Date().toISOString();
@@ -367,7 +313,7 @@ app.get("/api/appointments/confirm", (req, res) => {
   appointments[idx] = appt;
   write(APPOINTMENTS_FILE, appointments);
 
-  return res.json({ success: true, message: "Appointment confirmed!", appointmentId });
+  res.json({ success: true, message: "Appointment confirmed!", appointmentId });
 });
 
 /* =========================
@@ -376,8 +322,7 @@ app.get("/api/appointments/confirm", (req, res) => {
 app.post("/chat", async (req, res) => {
   try {
     const message = cleanText(req.body?.message, 1200);
-    const emailRaw = req.body?.email;
-    const email = normalizeEmail(emailRaw);
+    const email = normalizeEmail(req.body?.email);
 
     if (!message) return res.json({ reply: "Please type a message", success: false });
 
@@ -409,23 +354,20 @@ app.post("/chat", async (req, res) => {
       const appointmentId = uuidv4();
       const confirmToken = makeToken(24);
 
-      const appointment = {
+      appointments.push({
         id: appointmentId,
         email: isValidEmail(email) ? email : "",
         message,
         status: "pending",
         confirmToken,
         created: new Date().toISOString(),
-      };
+      });
 
-      appointments.push(appointment);
       write(APPOINTMENTS_FILE, appointments);
 
       if (isValidEmail(email) && transporter) {
         const clinic = process.env.CLINIC_NAME || "SnowSkye Clinic";
-        const confirmUrl = `${BASE_URL}/api/appointments/confirm?appointmentId=${encodeURIComponent(
-          appointmentId
-        )}&token=${encodeURIComponent(confirmToken)}`;
+        const confirmUrl = `${BASE_URL}/api/appointments/confirm?appointmentId=${encodeURIComponent(appointmentId)}&token=${encodeURIComponent(confirmToken)}`;
 
         await transporter.sendMail({
           from: process.env.EMAIL_USER,
@@ -454,39 +396,26 @@ app.post("/chat", async (req, res) => {
 });
 
 /* =========================
-   GET LEADS (ADMIN)
+   ADMIN APIs
 ========================= */
 app.get("/api/leads", requireAuth, (req, res) => {
   const leads = read(LEADS_FILE);
   res.json(leads.reverse());
 });
 
-/* =========================
-   GET APPOINTMENTS (ADMIN)
-========================= */
 app.get("/api/appointments", requireAuth, (req, res) => {
   const apps = read(APPOINTMENTS_FILE);
   res.json(apps.reverse());
 });
-// PUBLIC SAFE: recent activity (no emails, limited results)
+
 app.get("/api/public/recent", (req, res) => {
   const leads = read(LEADS_FILE).slice(-10).reverse();
   const apps = read(APPOINTMENTS_FILE).slice(-10).reverse();
 
-  const safeLeads = leads.map((l) => ({
-    id: l.id,
-    message: String(l.message || "").slice(0, 120),
-    time: l.time,
-  }));
-
-  const safeApps = apps.map((a) => ({
-    id: a.id,
-    message: String(a.message || "").slice(0, 120),
-    created: a.created,
-    status: a.status || "pending",
-  }));
-
-  res.json({ leads: safeLeads, appointments: safeApps });
+  res.json({
+    leads: leads.map((l) => ({ id: l.id, message: String(l.message || "").slice(0, 120), time: l.time })),
+    appointments: apps.map((a) => ({ id: a.id, message: String(a.message || "").slice(0, 120), created: a.created, status: a.status || "pending" })),
+  });
 });
 
 /* =========================
