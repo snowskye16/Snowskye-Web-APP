@@ -469,7 +469,13 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
    HOME + FALLBACK
 ========================= */
 app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
-
+// ✅ Prevent GET /chat 404 (browser probe / devtools)
+app.get("/chat", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message: "Chat endpoint ready. Use POST /api/chat",
+  });
+});
 // ✅ Only fallback for pages (NOT files)
 app.get("*", (req, res) => {
   // if request looks like a file, return 404 (so /widget.js works correctly)
