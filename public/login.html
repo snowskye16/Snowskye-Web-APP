@@ -415,8 +415,11 @@
 
   // ✅ API base (auto-detect same origin; override if needed)
   const API_BASE = (window.__API_BASE__ || "").trim(); // optional global override
-  const LOGIN_URL = (API_BASE ? API_BASE.replace(/\/$/, "") : "") + "/api/admin/login";
-  const SESSION_CHECK_URL = (API_BASE ? API_BASE.replace(/\/$/, "") : "") + "/me"; // fallback
+ const BASE = (API_BASE ? API_BASE.replace(/\/$/, "") : "");
+
+// Use the routes your server actually provides:
+const LOGIN_URL = BASE + "/api/login";      // ✅ matches server
+const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
   const DASHBOARD_URL = "/dashboard.html";
 
   // Load saved email
@@ -495,7 +498,7 @@
         return;
       }
 
-      errEl.textContent = data?.message || "Invalid credentials. Try again.";
+      errEl.textContent = data?.error || "Invalid credentials. Try again.";
       setLoading(false);
     }catch(e){
       errEl.textContent = "Server error. Please try again.";

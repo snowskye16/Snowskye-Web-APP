@@ -468,19 +468,31 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
 /* =========================
    HOME + FALLBACK
 ========================= */
-app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
+
+// Home
+app.get("/", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
 // ✅ Prevent GET /chat 404 (browser probe / devtools)
 app.get("/chat", (req, res) => {
-  res.status(200).json({
-    ok: true,
-    message: "Chat endpoint ready. Use POST /api/chat",
-  });
+  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
 });
+
+// Optional: also prevent GET /api/chat 404
+app.get("/api/chat", (req, res) => {
+  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
+});
+
 // ✅ Only fallback for pages (NOT files)
 app.get("*", (req, res) => {
-  // if request looks like a file, return 404 (so /widget.js works correctly)
-  if (req.path.includes(".")) return res.status(404).send("Not found");
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  // If request looks like a file (has a dot), do NOT serve index.html
+  // This avoids breaking /widget.js, /icon-192.png, etc.
+  if (req.path.includes(".")) {
+    return res.status(404).send("Not found");
+  }
+
+  return res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
 /* =========================
