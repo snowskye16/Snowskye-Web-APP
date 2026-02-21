@@ -64,6 +64,7 @@ app.set("trust proxy", 1);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // ✅ allow inline scripts in your HTML
   })
 );
 
