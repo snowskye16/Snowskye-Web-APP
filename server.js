@@ -564,7 +564,10 @@ app.get("/dashboard", (req, res) => {
   if (!req.session?.user) return res.redirect("/login");
   return res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
-
+// If your homepage currently works at /html, redirect it to /
+app.get("/html", (req, res) => {
+  return res.redirect(301, "/");
+});
 // ✅ Fallback only for "pages" (NOT files)
 app.get("*", (req, res) => {
   if (req.path.includes(".")) return res.status(404).send("Not found");
