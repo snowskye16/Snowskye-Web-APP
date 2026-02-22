@@ -79,7 +79,8 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-
+/ ✅ 1) STATIC FIRST
+app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 app.use(compression());
 app.use(express.json({ limit: "300kb" }));
 app.use(express.urlencoded({ extended: true, limit: "300kb" }));
@@ -551,27 +552,30 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
    PAGES (WEBSITE)
 ========================= */
 
-// ✅ Home => public/index.html
-app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
+// // ✅ Home
+app.get("/", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
 
-// ✅ Nice routes
+// ✅ Login
 app.get("/login", (req, res) => {
   if (req.session?.user) return res.redirect("/dashboard");
-  return res.sendFile(path.join(PUBLIC_DIR, "login.html"));
+  res.sendFile(path.join(PUBLIC_DIR, "login.html"));
 });
 
+// ✅ Dashboard
 app.get("/dashboard", (req, res) => {
   if (!req.session?.user) return res.redirect("/login");
-  return res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
+  res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
-// If your homepage currently works at /html, redirect it to /
-app.get("/html", (req, res) => {
-  return res.redirect(301, "/");
-});
-// ✅ Fallback only for "pages" (NOT files)
+
+// ❌ REMOVE /html route entirely
+// app.get("/html", ...) ❌
+
+// ✅ SPA fallback (LAST)
 app.get("*", (req, res) => {
-  if (req.path.includes(".")) return res.status(404).send("Not found");
-  return res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  if (req.path.includes(".")) return res.status(404).end();
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
 /* =========================
