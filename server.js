@@ -1,3 +1,14 @@
+/**
+ * ✅ SnowSkyeAI server.js (FULL FIXED + PREMIUM)
+ * Based on YOUR server.js, with these fixes:
+ * - ✅ Fix broken comment `//*` -> proper block comment
+ * - ✅ Remove duplicate `rateLimit` declaration
+ * - ✅ Remove duplicate `/api/chat` handler (keep only ONE real handler)
+ * - ✅ Keep `/chat` alias forwarding to `/api/chat` for widget compatibility
+ * - ✅ Add `proxy: true` for Render cookies
+ * - ✅ Keep your /login and /dashboard protected routes (nice UX)
+ */
+
 require("dotenv").config();
 
 const express = require("express");
@@ -16,26 +27,15 @@ const OpenAI = require("openai");
 
 const app = express();
 
-//* =========================
+/* =========================
    CONFIG
-
+========================= */
 const PORT = Number(process.env.PORT || 3000);
 const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PROD = NODE_ENV === "production";
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-/* =========================
-   RATE LIMIT (WIDGET)
-========================= */
-const rateLimit = require("express-rate-limit");
-
-const widgetLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20, // 20 requests/min per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 /**
  * If your frontend is hosted on a different domain, set:
  * FRONTEND_ORIGIN="https://your-frontend-domain.com"
@@ -94,28 +94,60 @@ app.use(
   })
 );
 
-// Global limiter
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 900,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
+/* =========================
+   RATE LIMITERS
+========================= */
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 900,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
+const authLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const leadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// widget-specific limiter (your request)
+const widgetLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests/min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(globalLimiter);
+
+/* =========================
+   SESSION (Render-ready)
+========================= */
 app.use(
   session({
     name: "snowskye.sid",
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
-
     proxy: true, // ✅ IMPORTANT on Render / proxies
-
     cookie: {
       httpOnly: true,
-      secure: IS_PROD, // Render prod = HTTPS => true
+      secure: IS_PROD, // Render uses HTTPS in prod
       sameSite: IS_PROD ? (CROSS_SITE ? "none" : "lax") : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
@@ -189,13 +221,6 @@ ${userMessage}
 }
 
 /* =========================
-   ROUTE LIMITERS (premium)
-========================= */
-const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 25, standardHeaders: true, legacyHeaders: false });
-const chatLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
-const leadLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
-
-/* =========================
    HEALTH
 ========================= */
 app.get("/health", (req, res) => res.json({ ok: true }));
@@ -257,14 +282,16 @@ app.post("/api/login", authLimiter, async (req, res) => {
     if (!valid) return res.status(401).json({ ok: false, error: "Invalid login" });
 
     req.session.user = { id: user.id, email: user.email, role: user.role };
-    res.json({ ok: true, success: true, user: req.session.user });
+
+    // (optional) ensure session saved before responding
+    req.session.save(() => res.json({ ok: true, success: true, user: req.session.user }));
   } catch (e) {
     console.error("login error:", e);
     res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 
-// Compatibility alias for your login.html (it calls /admin/login)
+// Compatibility alias for your login.html (if it calls /admin/login)
 app.post("/admin/login", authLimiter, (req, res, next) => {
   req.url = "/api/login";
   next();
@@ -280,15 +307,10 @@ app.post("/logout", (req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
-  if (!req.session?.user) {
-    return res.status(401).json({ loggedIn: false });
-  }
-
-  res.json({
-    loggedIn: true,
-    user: req.session.user,
-  });
+  if (!req.session?.user) return res.status(401).json({ loggedIn: false });
+  res.json({ loggedIn: true, user: req.session.user });
 });
+
 /* =========================
    ADMIN DATA (DASHBOARD)
 ========================= */
@@ -379,6 +401,14 @@ app.get("/api/public/recent", async (req, res) => {
 /* =========================
    CHAT (Widget + Contact pages)
 ========================= */
+
+// ✅ Compatibility alias for widget (your widget calls `${API_BASE}/chat`)
+app.post("/chat", widgetLimiter, (req, res, next) => {
+  req.url = "/api/chat";
+  next();
+});
+
+// ✅ One real handler only
 app.post("/api/chat", chatLimiter, async (req, res) => {
   const started = Date.now();
 
@@ -391,7 +421,7 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
 
-    // 1) Try saving lead, but NEVER block the reply if DB fails
+    // 1) Save lead (never block reply)
     try {
       await supabase.from("leads").insert([
         {
@@ -405,7 +435,7 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
       console.error("leads insert failed:", dbErr?.message || dbErr);
     }
 
-    // 2) AI reply (still works even if DB insert failed)
+    // 2) AI reply
     let reply = "AI not configured. Set OPENAI_API_KEY.";
 
     if (openai) {
@@ -422,7 +452,7 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
       }
     }
 
-    // 3) Booking intent => also try saving appointment, but don’t block reply
+    // 3) Booking intent => also try saving appointment
     if (looksLikeBookingIntent(message)) {
       try {
         await supabase.from("appointments").insert([
@@ -446,14 +476,14 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
   }
 });
 
-// Compatibility alias for widget (your widget calls `${API_BASE}/chat`)
-app.post("/chat", widgetLimiter, (req, res, next) => {
-  req.url = "/api/chat";
-  next();
+// ✅ Prevent GET /chat 404 (browser probe / devtools)
+app.get("/chat", (req, res) => {
+  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
 });
 
-app.post("/api/chat", widgetLimiter, async (req, res) => {
-  // real handler here
+// Optional: also prevent GET /api/chat 404
+app.get("/api/chat", (req, res) => {
+  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
 });
 
 /* =========================
@@ -489,7 +519,7 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
 });
 
 /* =========================
-   HOME + FALLBACK
+   HOME + ROUTES + FALLBACK
 ========================= */
 
 // Home
@@ -497,31 +527,15 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-// ✅ Login page route (NEW)
+// ✅ Nice routes (optional but premium)
 app.get("/login", (req, res) => {
-  // If already logged in, go dashboard
-  if (req.session?.user) {
-    return res.redirect("/dashboard");
-  }
+  if (req.session?.user) return res.redirect("/dashboard");
   return res.sendFile(path.join(PUBLIC_DIR, "login.html"));
 });
 
-// ✅ Dashboard route (NEW, protected)
 app.get("/dashboard", (req, res) => {
-  if (!req.session?.user) {
-    return res.redirect("/login");
-  }
+  if (!req.session?.user) return res.redirect("/login");
   return res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
-});
-
-// ✅ Prevent GET /chat 404 (browser probe / devtools)
-app.get("/chat", (req, res) => {
-  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
-});
-
-// Optional: also prevent GET /api/chat 404
-app.get("/api/chat", (req, res) => {
-  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
 });
 
 // ✅ Only fallback for pages (NOT files)
@@ -531,7 +545,6 @@ app.get("*", (req, res) => {
   if (req.path.includes(".")) {
     return res.status(404).send("Not found");
   }
-
   return res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
