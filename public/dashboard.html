@@ -558,7 +558,19 @@
 
   <div class="toast" id="toast"></div>
 
-<script>
+<<script>
+  // -----------------------------
+  // Config (MATCH SERVER ROUTES)
+  // -----------------------------
+  const ROUTES = {
+    me: "/api/me",
+    leads: "/api/leads",
+    apps: "/api/appointments",
+    logout: "/logout",
+    loginPage: "/login",       // ✅ FIXED
+    dashboardPage: "/dashboard"// ✅ FYI (current page)
+  };
+
   // -----------------------------
   // State
   // -----------------------------
@@ -611,13 +623,37 @@
   // -----------------------------
   // Auth guard (session)
   // -----------------------------
-  async function guard401(res){
-    if(res.status === 401){
-      window.location.href = "/login.html";
-      return true;
-    }
-    return false;
+  function goLogin(){
+    window.location.href = ROUTES.loginPage; // ✅ FIXED
   }
+
+  async function ensureSession(){
+    try{
+      const res = await fetch(ROUTES.me, { credentials: "include" });
+      const data = await res.json().catch(()=>null);
+
+      // ✅ Your server should return loggedIn:true (after our /api/me fix)
+      if(res.ok && data?.loggedIn === true) return true;
+
+      // Backward-compat: if you haven't updated /api/me yet, accept ok:true + user
+      if(res.ok && data?.ok === true && data?.user) return true;
+
+      goLogin();
+      return false;
+    }catch{
+      // If server unreachable, also redirect to login (or show offline)
+      goLogin();
+      return false;
+    }
+  }
+
+  async function guard401(res){
+  if(res.status === 401){
+    window.location.href = "/login";
+    return true;
+  }
+  return false;
+}
 
   // -----------------------------
   // Helpers
@@ -730,17 +766,17 @@
       els.liveText.textContent = "Syncing…";
 
       const [lRes, aRes] = await Promise.all([
-        fetch("/api/leads", { credentials: "include" }),
-        fetch("/api/appointments", { credentials: "include" })
+        fetch(ROUTES.leads, { credentials: "include" }),
+        fetch(ROUTES.apps, { credentials: "include" })
       ]);
 
       if(await guard401(lRes) || await guard401(aRes)) return;
 
-      leads = await lRes.json();
-      apps = await aRes.json();
+      const lJson = await lRes.json().catch(()=>[]);
+      const aJson = await aRes.json().catch(()=>[]);
 
-      if(!Array.isArray(leads)) leads = [];
-      if(!Array.isArray(apps)) apps = [];
+      leads = Array.isArray(lJson) ? lJson : [];
+      apps  = Array.isArray(aJson) ? aJson : [];
 
       els.lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
       els.liveDot.style.background = "var(--good)";
@@ -933,10 +969,10 @@
 
   els.logoutBtn.onclick = async () => {
     try{
-      await fetch("/logout", { method: "POST", credentials: "include" });
+      await fetch(ROUTES.logout, { method: "POST", credentials: "include" });
     }catch{}
     try{ localStorage.removeItem("token"); }catch{}
-    window.location.href = "/login.html";
+    window.location.href = "/login";// ✅ FIXED
   };
 
   els.exportBtn.onclick = () => {
@@ -970,11 +1006,16 @@
   }
 
   // -----------------------------
-  // Boot
+  // Boot (✅ ensure session first)
   // -----------------------------
-  setView("overview");
-  fetchAll();
-  setupTimer();
+  (async ()=>{
+    const ok = await ensureSession();
+    if(!ok) return;
+
+    setView("overview");
+    await fetchAll();
+    setupTimer();
+  })();
 </script>
 </body>
 </html>

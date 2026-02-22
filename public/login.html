@@ -396,8 +396,8 @@
     </section>
   </div>
 
-<script>
-  // PWA SW (keep yours)
+<<script>
+  // PWA
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(()=>{});
   }
@@ -413,18 +413,13 @@
   const rememberEmail = document.getElementById("rememberEmail");
   const demoFill = document.getElementById("demoFill");
 
-  // ✅ API base (auto-detect same origin; override if needed)
-  const API_BASE = (window.__API_BASE__ || "").trim(); // optional global override
- const BASE = (API_BASE ? API_BASE.replace(/\/$/, "") : "");
+  const LOGIN_URL = "/api/login";
+  const SESSION_CHECK_URL = "/api/me";
+  const DASHBOARD_URL = "/dashboard"; // ✅ FIXED
 
-// Use the routes your server actually provides:
-const LOGIN_URL = BASE + "/api/login";      // ✅ matches server
-const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
-  const DASHBOARD_URL = "/dashboard.html";
-
-  // Load saved email
+  // Restore remembered email
   try{
-    const saved = localStorage.getItem("snowskye_admin_email") || "";
+    const saved = localStorage.getItem("snowskye_admin_email");
     if(saved){
       emailEl.value = saved;
       rememberEmail.checked = true;
@@ -448,19 +443,21 @@ const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
     btnSpin.style.display = v ? "inline-block" : "none";
   }
 
-  // ✅ Auto redirect if already logged in (best UX)
+  // ✅ SAFE auto-redirect (ONLY when logged in)
   (async () => {
     try{
       const res = await fetch(SESSION_CHECK_URL, { credentials: "include" });
-      if(res.ok){
+      const data = await res.json().catch(()=>null);
+
+      if(res.ok && data?.loggedIn === true){
         window.location.href = DASHBOARD_URL;
       }
     }catch{}
   })();
 
   async function login(){
-    const email = (emailEl.value || "").trim();
-    const password = pwEl.value || "";
+    const email = emailEl.value.trim();
+    const password = pwEl.value;
 
     errEl.textContent = "";
 
@@ -472,7 +469,6 @@ const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
     setLoading(true);
 
     try{
-      // ✅ session cookie auth
       const res = await fetch(LOGIN_URL, {
         method: "POST",
         credentials: "include",
@@ -480,9 +476,11 @@ const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
         body: JSON.stringify({ email, password })
       });
 
-      const data = await res.json().catch(()=> ({}));
+      const text = await res.text();
+      let data = {};
+      try{ data = JSON.parse(text); }catch{}
 
-      if(res.ok && data && data.success){
+      if(res.ok && data?.success){
         try{
           if(rememberEmail.checked){
             localStorage.setItem("snowskye_admin_email", email);
@@ -491,25 +489,20 @@ const SESSION_CHECK_URL = BASE + "/api/me"; // ✅ matches server
           }
         }catch{}
 
-        // not required, but safe to keep
-        try{ localStorage.setItem("token", data.token || "session"); }catch{}
-
         window.location.href = DASHBOARD_URL;
         return;
       }
 
-      errEl.textContent = data?.error || "Invalid credentials. Try again.";
-      setLoading(false);
+      errEl.textContent = data?.error || `Login failed (${res.status})`;
     }catch(e){
       errEl.textContent = "Server error. Please try again.";
-      setLoading(false);
     }
+
+    setLoading(false);
   }
 
   btn.onclick = login;
-
-  // Enter key submit
-  document.addEventListener("keydown", (e)=>{
+  document.addEventListener("keydown", e => {
     if(e.key === "Enter") login();
   });
 </script>

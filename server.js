@@ -266,10 +266,15 @@ app.post("/logout", (req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
-  if (!req.session?.user) return res.status(401).json({ ok: false });
-  res.json({ ok: true, user: req.session.user });
-});
+  if (!req.session?.user) {
+    return res.status(401).json({ loggedIn: false });
+  }
 
+  res.json({
+    loggedIn: true,
+    user: req.session.user,
+  });
+});
 /* =========================
    ADMIN DATA (DASHBOARD)
 ========================= */
@@ -472,6 +477,23 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
 // Home
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
+// ✅ Login page route (NEW)
+app.get("/login", (req, res) => {
+  // If already logged in, go dashboard
+  if (req.session?.user) {
+    return res.redirect("/dashboard");
+  }
+  return res.sendFile(path.join(PUBLIC_DIR, "login.html"));
+});
+
+// ✅ Dashboard route (NEW, protected)
+app.get("/dashboard", (req, res) => {
+  if (!req.session?.user) {
+    return res.redirect("/login");
+  }
+  return res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
 
 // ✅ Prevent GET /chat 404 (browser probe / devtools)
