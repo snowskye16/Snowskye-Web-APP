@@ -1,12 +1,15 @@
 /**
- * ✅ SnowSkyeAI server.js (CLEAN UPGRADE)
+ * ✅ SnowSkyeAI server.js (PREMIUM + FIXED CHAT FLOW)
  *
  * Goals:
  * ✅ Widget works cross-domain without cookies (public routes)
  * ✅ Admin dashboard uses sessions (same domain)
- * ✅ ALWAYS replies (OpenAI down => fallback)
+ * ✅ ALWAYS replies (OpenAI down => premium fallback)
+ * ✅ Smarter lead flow (no email spam on "hi")
  * ✅ Email capture stops repeating once captured (per sessionId)
+ * ✅ “Thanks” only once (no repeating)
  * ✅ Saves leads + booking intent to Supabase (never blocks reply)
+ * ✅ Optional: quick debug route for widget file
  */
 
 require("dotenv").config();
@@ -20,6 +23,7 @@ const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 const path = require("path");
+const fs = require("fs");
 
 const { createClient } = require("@supabase/supabase-js");
 const OpenAI = require("openai");
@@ -70,7 +74,7 @@ if (!supabase) {
    OPENAI (optional)
 ========================= */
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-if (!openai) console.warn("⚠️ OPENAI_API_KEY missing (AI replies will use fallback).");
+if (!openai) console.warn("⚠️ OPENAI_API_KEY missing (AI replies will use premium fallback).");
 
 /* =========================
    SECURITY + MIDDLEWARE
@@ -120,14 +124,12 @@ app.use(globalLimiter);
 
 /* =========================
    CORS (SPLIT)
-   - Public widget/chat: no cookies needed
-   - Admin routes: allow cookies (same site on Render)
 ========================= */
 
 // Public: allow cross-domain; no credentials needed
 const publicCors = cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/postman
+    if (!origin) return cb(null, true);
     if (!LOCK_CORS) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
     return cb(new Error("Not allowed by CORS"));
@@ -135,11 +137,9 @@ const publicCors = cors({
   credentials: false,
 });
 
-// Admin: sessions/cookies (works best if admin pages served from SAME Render domain)
+// Admin: sessions/cookies
 const adminCors = cors({
   origin: (origin, cb) => {
-    // If admin is served on same domain, origin is same and OK.
-    // If you ever host dashboard on another domain, you must LOCK and allowlist it.
     if (!origin) return cb(null, true);
     if (!LOCK_CORS) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
@@ -161,23 +161,32 @@ app.use(
     cookie: {
       httpOnly: true,
       secure: IS_PROD,
-      sameSite: "lax", // ✅ best when /login + /dashboard are on Render domain
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
 /* =========================
-   STATIC
+   STATIC (serve /public)
 ========================= */
 app.use((req, res, next) => {
-  // cache widget.js for speed
   if (req.path === "/widget.js") {
     res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day
   }
   next();
 });
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
+
+// Optional: clear debug to confirm widget exists on server
+app.get("/debug/public-files", (req, res) => {
+  try {
+    const files = fs.readdirSync(PUBLIC_DIR);
+    res.json({ ok: true, publicDir: PUBLIC_DIR, files });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 /* =========================
    HELPERS
@@ -208,13 +217,7 @@ function requireAuth(req, res, next) {
 }
 function looksLikeBookingIntent(message) {
   const m = String(message || "").toLowerCase();
-  return (
-    m.includes("book") ||
-    m.includes("appointment") ||
-    m.includes("schedule") ||
-    m.includes("consult") ||
-    m.includes("call")
-  );
+  return m.includes("book") || m.includes("appointment") || m.includes("schedule") || m.includes("consult") || m.includes("call");
 }
 function extractEmailFromText(text) {
   const t = String(text || "");
@@ -223,12 +226,13 @@ function extractEmailFromText(text) {
 }
 
 /* =========================
-   EMAIL STOP-LOOP FIX (per sessionId)
-   - remembers per sessionId for a while
-   - once email is captured, widget stops asking
+   SESSION MEMORY (PREMIUM FLOW)
 ========================= */
+// sessionMemory.get(sessionId) => {
+//   email, emailCapturedAt, askedEmailAt,
+//   msgCount, thankedAt
+// }
 const sessionMemory = new Map();
-// sessionMemory.get(sessionId) => { email, emailCapturedAt, askedEmailAt }
 
 function getSessionMem(sessionId) {
   if (!sessionId) return null;
@@ -237,7 +241,7 @@ function getSessionMem(sessionId) {
 
   // TTL cleanup: 14 days
   const ttlMs = 14 * 24 * 60 * 60 * 1000;
-  const last = v.emailCapturedAt || v.askedEmailAt || 0;
+  const last = v.emailCapturedAt || v.askedEmailAt || v.thankedAt || 0;
   if (last && Date.now() - last > ttlMs) {
     sessionMemory.delete(sessionId);
     return null;
@@ -262,11 +266,49 @@ function markAskedEmail(sessionId) {
   });
 }
 
-function shouldAskEmail(sessionId) {
-  // Ask email only if we do NOT already have it,
-  // and we haven’t asked in the last ~5 minutes (prevents spam looping).
+function bumpMsgCount(sessionId) {
+  if (!sessionId) return 0;
+  const cur = sessionMemory.get(sessionId) || {};
+  const next = (cur.msgCount || 0) + 1;
+  sessionMemory.set(sessionId, { ...cur, msgCount: next });
+  return next;
+}
+
+function markThanked(sessionId) {
+  if (!sessionId) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  sessionMemory.set(sessionId, { ...cur, thankedAt: Date.now() });
+}
+
+function hasThanked(sessionId) {
+  const cur = getSessionMem(sessionId);
+  return Boolean(cur?.thankedAt);
+}
+
+function looksLikeLeadIntent(message) {
+  const m = String(message || "").toLowerCase();
+  return (
+    looksLikeBookingIntent(m) ||
+    m.includes("price") ||
+    m.includes("pricing") ||
+    m.includes("how much") ||
+    m.includes("cost") ||
+    m.includes("package") ||
+    m.includes("quote") ||
+    m.includes("contact") ||
+    m.includes("email") ||
+    m.includes("call")
+  );
+}
+
+function shouldAskEmail(sessionId, message, msgCount) {
   const mem = getSessionMem(sessionId);
   if (mem?.email) return false;
+
+  // Don’t ask on first message unless strong intent
+  const strongIntent = looksLikeLeadIntent(message);
+  if (!strongIntent && (msgCount || 0) < 2) return false;
+
   const asked = mem?.askedEmailAt || 0;
   const cooldownMs = 5 * 60 * 1000;
   return !asked || Date.now() - asked > cooldownMs;
@@ -296,23 +338,37 @@ ${userMessage}
 }
 
 /* =========================
-   FALLBACK (ALWAYS REPLY)
+   PREMIUM FALLBACK (ALWAYS REPLY)
 ========================= */
 const FALLBACK = {
   greet: "Hi! I’m SnowSkyeAI. What type of business do you run and what’s your goal (leads, sales, or automation)?",
   pricing:
-    "Pricing is one-time (no monthly fees): Starter $100 (chatbot), Popular $300 (website + chatbot + lead automation), Premium $500 (full system). What business type is this for?",
+    "Pricing is one-time (no monthly fees): Starter $100 (chatbot), Popular $300 (website + chatbot + lead automation), Premium $500 (full system). What business type is this for and what features do you need?",
   booking:
     "To book: please share your name, email, preferred date/time, and timezone. I’ll mark it as pending for follow-up.",
 };
 
-function fallbackReply(message) {
+function premiumFallbackReply(message, sessionId) {
   const m = String(message || "").toLowerCase();
-  if (m.includes("price") || m.includes("pricing") || m.includes("how much")) return FALLBACK.pricing;
-  if (looksLikeBookingIntent(m)) return FALLBACK.booking;
-  if (m.includes("website")) return "Nice — what kind of website do you need (clinic, agency, e-commerce, personal brand)?";
-  if (m.includes("chatbot")) return "Great — where do you want the chatbot (website, Facebook, IG, WhatsApp)?";
-  return "Got it. What’s your #1 goal right now — more leads, more sales, or automate support?";
+
+  // Light intent routing
+  if (m.includes("price") || m.includes("pricing") || m.includes("how much") || m.includes("cost")) {
+    return FALLBACK.pricing;
+  }
+  if (looksLikeBookingIntent(m)) {
+    return FALLBACK.booking;
+  }
+
+  // Quick qualification prompts (1–2 questions max)
+  if (m.includes("website")) {
+    return "Nice — what kind of website is it (clinic, agency, e-commerce, personal brand)? Also, do you already have a domain/logo?";
+  }
+  if (m.includes("chatbot")) {
+    return "Great — where do you want the chatbot (website, Facebook, Instagram, WhatsApp)? And what should it do: answer FAQs, capture leads, or take bookings?";
+  }
+
+  // Default: smart business questions
+  return "Got it. What type of business is this, and what’s your #1 goal — more leads, more sales, or automate support?";
 }
 
 /* =========================
@@ -344,11 +400,7 @@ app.post("/api/admin/register", adminCors, authLimiter, async (req, res) => {
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: "Invalid email" });
     if (password.length < 6) return res.status(400).json({ ok: false, error: "Password must be at least 6 characters" });
 
-    const { data: existing, error: e1 } = await supabase
-      .from("admin_users")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
+    const { data: existing, error: e1 } = await supabase.from("admin_users").select("id").eq("email", email).maybeSingle();
     if (e1) return res.status(500).json({ ok: false, error: "DB error" });
     if (existing) return res.status(409).json({ ok: false, error: "Admin already exists" });
 
@@ -372,12 +424,7 @@ app.post("/api/login", adminCors, authLimiter, async (req, res) => {
 
     if (!email || !password) return res.status(400).json({ ok: false, error: "Email and password required" });
 
-    const { data: user, error } = await supabase
-      .from("admin_users")
-      .select("id,email,password_hash,role")
-      .eq("email", email)
-      .maybeSingle();
-
+    const { data: user, error } = await supabase.from("admin_users").select("id,email,password_hash,role").eq("email", email).maybeSingle();
     if (error) return res.status(500).json({ ok: false, error: "DB error" });
     if (!user) return res.status(401).json({ ok: false, error: "Invalid login" });
 
@@ -458,11 +505,7 @@ app.get("/api/public/recent", publicCors, async (req, res) => {
   try {
     if (!supabase) return res.status(200).json({ ok: false, leads: [], appointments: [] });
 
-    const { data: leads } = await supabase
-      .from("leads")
-      .select("message,created_at")
-      .order("created_at", { ascending: false })
-      .limit(8);
+    const { data: leads } = await supabase.from("leads").select("message,created_at").order("created_at", { ascending: false }).limit(8);
 
     const { data: appointments } = await supabase
       .from("appointments")
@@ -486,8 +529,6 @@ app.get("/api/public/recent", publicCors, async (req, res) => {
 
 /* =========================
    CHAT (WIDGET + WEBSITE)
-   ✅ ALWAYS REPLY
-   ✅ Email stops looping after captured
 ========================= */
 
 // alias: POST /chat -> /api/chat
@@ -526,7 +567,9 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
 
-    // Email capture logic (body > message text > memory > DB)
+    const msgCount = bumpMsgCount(sessionId);
+
+    // Email capture (body > message text > memory > DB)
     const emailFromBody = normalizeEmail(req.body?.email);
     const emailFromText = extractEmailFromText(message);
 
@@ -534,16 +577,13 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     if (isValidEmail(emailFromBody)) email = emailFromBody;
     else if (isValidEmail(emailFromText)) email = emailFromText;
 
-    // If we got email now -> store in memory so we stop asking
     if (email) setSessionEmail(sessionId, email);
 
-    // If no email, check memory first
     if (!email) {
       const mem = getSessionMem(sessionId);
       if (mem?.email && isValidEmail(mem.email)) email = mem.email;
     }
 
-    // If still no email, optionally check DB (so email persists across reloads)
     if (!email) {
       const dbEmail = await getKnownEmailFromDB(sessionId);
       if (dbEmail) {
@@ -568,7 +608,7 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       }
     }
 
-    // ✅ AI reply if available, else fallback (ALWAYS respond)
+    // ✅ AI reply if available, else premium fallback (ALWAYS reply)
     let reply = "";
     let usedAI = false;
 
@@ -582,12 +622,11 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
         reply = ai.output_text || "";
         usedAI = Boolean(reply);
       } catch (aiErr) {
-        // OpenAI down => fallback
         console.error("openai error:", aiErr?.message || aiErr);
       }
     }
 
-    if (!reply) reply = fallbackReply(message);
+    if (!reply) reply = premiumFallbackReply(message, sessionId);
 
     // ✅ Booking intent => save appointment (never blocks reply)
     if (looksLikeBookingIntent(message) && supabase) {
@@ -602,26 +641,24 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       } catch (dbErr) {
         console.error("appointments insert failed:", dbErr?.message || dbErr);
       }
-
-      // add booking helper only once (no spam)
       reply += "\n\n📅 To book faster: send preferred date/time + timezone.";
     }
 
-    // ✅ Email prompt (ONLY if we truly don’t have email AND cooldown allows)
-    if (!email && shouldAskEmail(sessionId)) {
+    // ✅ Ask for email only when it makes sense (intent OR after 2+ messages)
+    if (!email && shouldAskEmail(sessionId, message, msgCount)) {
       markAskedEmail(sessionId);
-      reply += "\n\n✉️ What’s the best email to follow up with you?";
+      reply += "\n\n✉️ If you want, leave your email and I’ll send pricing + next steps.";
     }
 
-    // ✅ If we have email, ask business questions instead (no email looping)
-    if (email) {
+    // ✅ Say thanks ONLY ONCE per session (no repeating)
+    if (email && !hasThanked(sessionId)) {
+      markThanked(sessionId);
       reply += "\n\n✅ Thanks! What type of business is this for, and what’s your target launch date?";
     }
 
     res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
   } catch (e) {
     console.error("chat route fatal:", e);
-    // Always respond
     res.json({ ok: true, reply: FALLBACK.greet, ai: false });
   }
 });
@@ -674,7 +711,6 @@ app.get("/dashboard", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
 
-// Optional: if hosting homepage on backend too
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
