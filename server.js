@@ -16,7 +16,7 @@ const OpenAI = require("openai");
 
 const app = express();
 
-/* =========================
+//* =========================
    CONFIG
 ========================= */
 const PORT = Number(process.env.PORT || 3000);
@@ -25,6 +25,17 @@ const IS_PROD = NODE_ENV === "production";
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 
+/* =========================
+   RATE LIMIT (WIDGET)
+========================= */
+const rateLimit = require("express-rate-limit");
+
+const widgetLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests/min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 /**
  * If your frontend is hosted on a different domain, set:
  * FRONTEND_ORIGIN="https://your-frontend-domain.com"
@@ -433,9 +444,13 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
 });
 
 // Compatibility alias for widget (your widget calls `${API_BASE}/chat`)
-app.post("/chat", chatLimiter, (req, res, next) => {
+app.post("/chat", widgetLimiter, (req, res, next) => {
   req.url = "/api/chat";
   next();
+});
+
+app.post("/api/chat", widgetLimiter, async (req, res) => {
+  // real handler here
 });
 
 /* =========================
