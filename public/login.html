@@ -39,7 +39,6 @@
       overflow:hidden;
     }
 
-    /* soft animated glow blobs */
     .blob{
       position:absolute;
       width:520px;
@@ -288,6 +287,15 @@
       position:relative;
       z-index:1;
     }
+    .ok{
+      margin-top:10px;
+      color: rgba(34,197,94,.95);
+      font-size:12.5px;
+      min-height:18px;
+      text-align:center;
+      position:relative;
+      z-index:1;
+    }
 
     .foot{
       margin-top:14px;
@@ -391,120 +399,145 @@
       </button>
 
       <div class="err" id="error"></div>
-
       <div class="foot">Secure AI Dashboard • SnowSkyeAI</div>
     </section>
   </div>
 
-<<script>
-  // PWA
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(()=>{});
-  }
-
-  const emailEl = document.getElementById("email");
-  const pwEl = document.getElementById("password");
-  const errEl = document.getElementById("error");
-  const btn = document.getElementById("loginBtn");
-  const btnText = document.getElementById("btnText");
-  const btnSpin = document.getElementById("btnSpin");
-
-  const togglePw = document.getElementById("togglePw");
-  const rememberEmail = document.getElementById("rememberEmail");
-  const demoFill = document.getElementById("demoFill");
-
-  const LOGIN_URL = "/api/login";
-  const SESSION_CHECK_URL = "/api/me";
-  const DASHBOARD_URL = "/dashboard"; // ✅ FIXED
-
-  // Restore remembered email
-  try{
-    const saved = localStorage.getItem("snowskye_admin_email");
-    if(saved){
-      emailEl.value = saved;
-      rememberEmail.checked = true;
+  <!-- ✅ FIXED: was <<script> (broken) -->
+  <script>
+    // PWA
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(()=>{});
     }
-  }catch{}
 
-  togglePw.onclick = () => {
-    const isPw = pwEl.type === "password";
-    pwEl.type = isPw ? "text" : "password";
-    togglePw.textContent = isPw ? "Hide" : "Show";
-  };
+    const emailEl = document.getElementById("email");
+    const pwEl = document.getElementById("password");
+    const errEl = document.getElementById("error");
+    const btn = document.getElementById("loginBtn");
+    const btnText = document.getElementById("btnText");
+    const btnSpin = document.getElementById("btnSpin");
 
-  demoFill.onclick = () => {
-    if(!emailEl.value) emailEl.value = "admin@example.com";
-    if(!pwEl.value) pwEl.value = "password";
-  };
+    const togglePw = document.getElementById("togglePw");
+    const rememberEmail = document.getElementById("rememberEmail");
+    const demoFill = document.getElementById("demoFill");
 
-  function setLoading(v){
-    btn.disabled = v;
-    btnText.textContent = v ? "Signing in..." : "Login";
-    btnSpin.style.display = v ? "inline-block" : "none";
-  }
+    const LOGIN_URL = "/api/login";
+    const SESSION_CHECK_URL = "/api/me";
 
-  // ✅ SAFE auto-redirect (ONLY when logged in)
-  (async () => {
-    try{
-      const res = await fetch(SESSION_CHECK_URL, { credentials: "include" });
-      const data = await res.json().catch(()=>null);
+    // Support optional redirect like: /login?next=/dashboard
+    const params = new URLSearchParams(location.search);
+    const NEXT_URL = params.get("next") || "/dashboard";
 
-      if(res.ok && data?.loggedIn === true){
-        window.location.href = DASHBOARD_URL;
+    // Restore remembered email
+    try {
+      const saved = localStorage.getItem("snowskye_admin_email");
+      if (saved) {
+        emailEl.value = saved;
+        rememberEmail.checked = true;
       }
-    }catch{}
-  })();
+    } catch {}
 
-  async function login(){
-    const email = emailEl.value.trim();
-    const password = pwEl.value;
+    togglePw.onclick = () => {
+      const isPw = pwEl.type === "password";
+      pwEl.type = isPw ? "text" : "password";
+      togglePw.textContent = isPw ? "Hide" : "Show";
+    };
 
-    errEl.textContent = "";
+    demoFill.onclick = () => {
+      if (!emailEl.value) emailEl.value = "admin@example.com";
+      if (!pwEl.value) pwEl.value = "password";
+    };
 
-    if(!email || !password){
-      errEl.textContent = "Please enter email and password.";
-      return;
+    function isValidEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     }
 
-    setLoading(true);
+    function setLoading(v) {
+      btn.disabled = v;
+      btnText.textContent = v ? "Signing in..." : "Login";
+      btnSpin.style.display = v ? "inline-block" : "none";
+    }
 
-    try{
-      const res = await fetch(LOGIN_URL, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
+    function setError(msg) {
+      errEl.textContent = msg || "";
+    }
 
-      const text = await res.text();
-      let data = {};
-      try{ data = JSON.parse(text); }catch{}
+    // Auto-redirect ONLY if logged in
+    (async () => {
+      try {
+        const res = await fetch(SESSION_CHECK_URL, { credentials: "include" });
+        const data = await res.json().catch(() => null);
 
-      if(res.ok && data?.success){
-        try{
-          if(rememberEmail.checked){
-            localStorage.setItem("snowskye_admin_email", email);
-          } else {
-            localStorage.removeItem("snowskye_admin_email");
-          }
-        }catch{}
+        if (res.ok && data?.loggedIn === true) {
+          window.location.href = NEXT_URL;
+        }
+      } catch {}
+    })();
 
-        window.location.href = DASHBOARD_URL;
+    async function login() {
+      const email = (emailEl.value || "").trim();
+      const password = pwEl.value || "";
+
+      setError("");
+
+      if (!email || !password) {
+        setError("Please enter email and password.");
+        return;
+      }
+      if (!isValidEmail(email)) {
+        setError("Please enter a valid email address.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters.");
         return;
       }
 
-      errEl.textContent = data?.error || `Login failed (${res.status})`;
-    }catch(e){
-      errEl.textContent = "Server error. Please try again.";
+      setLoading(true);
+
+      try {
+        const res = await fetch(LOGIN_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data?.success) {
+          try {
+            if (rememberEmail.checked) {
+              localStorage.setItem("snowskye_admin_email", email);
+            } else {
+              localStorage.removeItem("snowskye_admin_email");
+            }
+          } catch {}
+
+          window.location.href = NEXT_URL;
+          return;
+        }
+
+        // Nice messages by status code
+        if (res.status === 401) {
+          setError("Invalid email or password.");
+        } else if (res.status === 429) {
+          setError("Too many attempts. Please wait 1 minute and try again.");
+        } else {
+          setError(data?.error || `Login failed (${res.status}).`);
+        }
+      } catch {
+        setError("Server unavailable. Please try again.");
+      }
+
+      setLoading(false);
     }
 
-    setLoading(false);
-  }
+    btn.onclick = login;
 
-  btn.onclick = login;
-  document.addEventListener("keydown", e => {
-    if(e.key === "Enter") login();
-  });
-</script>
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") login();
+    });
+  </script>
 </body>
 </html>

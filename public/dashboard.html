@@ -552,470 +552,482 @@
         <div class="list" id="appsList"></div>
         <div class="empty" id="appsEmpty" style="display:none;">No appointments yet.</div>
       </section>
-
     </main>
   </div>
 
   <div class="toast" id="toast"></div>
 
-<<script>
-  // -----------------------------
-  // Config (MATCH SERVER ROUTES)
-  // -----------------------------
-  const ROUTES = {
-    me: "/api/me",
-    leads: "/api/leads",
-    apps: "/api/appointments",
-    logout: "/logout",
-    loginPage: "/login",       // ✅ FIXED
-    dashboardPage: "/dashboard"// ✅ FYI (current page)
-  };
+  <!-- ✅ FIXED: was "<<script>" in your file -->
+  <script>
+    // -----------------------------
+    // Config (MATCH SERVER ROUTES)
+    // -----------------------------
+    const ROUTES = {
+      me: "/api/me",
+      leads: "/api/leads",
+      apps: "/api/appointments",
+      logout: "/logout",
+      loginPage: "/login",
+      dashboardPage: "/dashboard"
+    };
 
-  // -----------------------------
-  // State
-  // -----------------------------
-  let VIEW = "overview";
-  let autoRefresh = true;
-  let timer = null;
+    // -----------------------------
+    // State
+    // -----------------------------
+    let VIEW = "overview";
+    let autoRefresh = true;
+    let timer = null;
 
-  let leads = [];
-  let apps = [];
+    let leads = [];
+    let apps = [];
 
-  const els = {
-    pageTitle: document.getElementById("pageTitle"),
-    pageDesc: document.getElementById("pageDesc"),
-    search: document.getElementById("search"),
-    statusFilter: document.getElementById("statusFilter"),
-    autoSwitch: document.getElementById("autoSwitch"),
-    refreshBtn: document.getElementById("refreshBtn"),
-    exportBtn: document.getElementById("exportBtn"),
-    logoutBtn: document.getElementById("logoutBtn"),
-    lastSync: document.getElementById("lastSync"),
-    liveDot: document.getElementById("liveDot"),
-    liveText: document.getElementById("liveText"),
+    const els = {
+      pageTitle: document.getElementById("pageTitle"),
+      pageDesc: document.getElementById("pageDesc"),
+      search: document.getElementById("search"),
+      statusFilter: document.getElementById("statusFilter"),
+      autoSwitch: document.getElementById("autoSwitch"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      exportBtn: document.getElementById("exportBtn"),
+      logoutBtn: document.getElementById("logoutBtn"),
+      lastSync: document.getElementById("lastSync"),
+      liveDot: document.getElementById("liveDot"),
+      liveText: document.getElementById("liveText"),
 
-    kpiLeads: document.getElementById("kpiLeads"),
-    kpiLeadsSub: document.getElementById("kpiLeadsSub"),
-    kpiLeadsToday: document.getElementById("kpiLeadsToday"),
-    kpiApps: document.getElementById("kpiApps"),
-    kpiAppsSub: document.getElementById("kpiAppsSub"),
-    kpiPending: document.getElementById("kpiPending"),
+      kpiLeads: document.getElementById("kpiLeads"),
+      kpiLeadsSub: document.getElementById("kpiLeadsSub"),
+      kpiLeadsToday: document.getElementById("kpiLeadsToday"),
+      kpiApps: document.getElementById("kpiApps"),
+      kpiAppsSub: document.getElementById("kpiAppsSub"),
+      kpiPending: document.getElementById("kpiPending"),
 
-    countText: document.getElementById("countText"),
-    leadCountPill: document.getElementById("leadCountPill"),
-    appCountPill: document.getElementById("appCountPill"),
+      countText: document.getElementById("countText"),
+      leadCountPill: document.getElementById("leadCountPill"),
+      appCountPill: document.getElementById("appCountPill"),
 
-    viewOverview: document.getElementById("view-overview"),
-    viewLeads: document.getElementById("view-leads"),
-    viewApps: document.getElementById("view-appointments"),
+      viewOverview: document.getElementById("view-overview"),
+      viewLeads: document.getElementById("view-leads"),
+      viewApps: document.getElementById("view-appointments"),
 
-    overviewList: document.getElementById("overviewList"),
-    leadsList: document.getElementById("leadsList"),
-    appsList: document.getElementById("appsList"),
+      overviewList: document.getElementById("overviewList"),
+      leadsList: document.getElementById("leadsList"),
+      appsList: document.getElementById("appsList"),
 
-    overviewEmpty: document.getElementById("overviewEmpty"),
-    leadsEmpty: document.getElementById("leadsEmpty"),
-    appsEmpty: document.getElementById("appsEmpty"),
+      overviewEmpty: document.getElementById("overviewEmpty"),
+      leadsEmpty: document.getElementById("leadsEmpty"),
+      appsEmpty: document.getElementById("appsEmpty"),
 
-    toast: document.getElementById("toast")
-  };
+      toast: document.getElementById("toast")
+    };
 
-  // -----------------------------
-  // Auth guard (session)
-  // -----------------------------
-  function goLogin(){
-    window.location.href = ROUTES.loginPage; // ✅ FIXED
-  }
-
-  async function ensureSession(){
-    try{
-      const res = await fetch(ROUTES.me, { credentials: "include" });
-      const data = await res.json().catch(()=>null);
-
-      // ✅ Your server should return loggedIn:true (after our /api/me fix)
-      if(res.ok && data?.loggedIn === true) return true;
-
-      // Backward-compat: if you haven't updated /api/me yet, accept ok:true + user
-      if(res.ok && data?.ok === true && data?.user) return true;
-
-      goLogin();
-      return false;
-    }catch{
-      // If server unreachable, also redirect to login (or show offline)
-      goLogin();
-      return false;
-    }
-  }
-
-  async function guard401(res){
-  if(res.status === 401){
-    window.location.href = "/login";
-    return true;
-  }
-  return false;
-}
-
-  // -----------------------------
-  // Helpers
-  // -----------------------------
-  function fmtDate(ts){
-    if(!ts) return "—";
-    try { return new Date(ts).toLocaleString(); }
-    catch { return "—"; }
-  }
-
-  function safe(v){ return (v === null || v === undefined || v === "") ? "" : String(v); }
-
-  function toast(msg, sub=""){
-    els.toast.innerHTML = `<div>${msg}</div>${sub ? `<small>${sub}</small>` : ""}`;
-    els.toast.classList.add("show");
-    setTimeout(()=>els.toast.classList.remove("show"), 2600);
-  }
-
-  function setView(view){
-    VIEW = view;
-
-    document.querySelectorAll(".nav button").forEach(b=>{
-      b.classList.toggle("active", b.dataset.view === view);
-    });
-
-    els.viewOverview.style.display = (view === "overview") ? "block" : "none";
-    els.viewLeads.style.display = (view === "leads") ? "block" : "none";
-    els.viewApps.style.display = (view === "appointments") ? "block" : "none";
-
-    if(view === "overview"){
-      els.pageTitle.textContent = "Overview";
-      els.pageDesc.textContent = "A premium snapshot of your SnowSkye AI performance.";
-    } else if(view === "leads"){
-      els.pageTitle.textContent = "Leads";
-      els.pageDesc.textContent = "Every message and email captured by SnowSkye AI.";
-    } else {
-      els.pageTitle.textContent = "Appointments";
-      els.pageDesc.textContent = "Booking requests detected from user intent.";
+    // -----------------------------
+    // Auth guard (session)
+    // -----------------------------
+    function goLogin(){
+      window.location.href = ROUTES.loginPage;
     }
 
-    renderAll();
-  }
+    async function ensureSession(){
+      try{
+        const res = await fetch(ROUTES.me, { credentials: "include" });
+        const data = await res.json().catch(()=>null);
 
-  function withinDays(ts, days){
-    if(!ts) return false;
-    const now = Date.now();
-    const t = new Date(ts).getTime();
-    if(Number.isNaN(t)) return false;
-    return (now - t) <= days * 24 * 60 * 60 * 1000;
-  }
+        if(res.ok && data?.loggedIn === true) return true;
 
-  function isToday(ts){
-    if(!ts) return false;
-    const d = new Date(ts);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
-  }
+        // Backward-compat if older response format
+        if(res.ok && data?.ok === true && data?.user) return true;
 
-  function isYesterday(ts){
-    if(!ts) return false;
-    const d = new Date(ts);
-    const y = new Date();
-    y.setDate(y.getDate() - 1);
-    return d.toDateString() === y.toDateString();
-  }
+        goLogin();
+        return false;
+      }catch{
+        goLogin();
+        return false;
+      }
+    }
 
-  function statusPill(status){
-    const s = (status || "pending").toLowerCase();
-    if(s === "confirmed") return `<span class="pill good">● Confirmed</span>`;
-    if(s === "cancelled") return `<span class="pill bad">● Cancelled</span>`;
-    return `<span class="pill warn">● Pending</span>`;
-  }
+    async function guard401(res){
+      if(res.status === 401){
+        goLogin();
+        return true;
+      }
+      return false;
+    }
 
-  function matchSearch(item, q){
-    if(!q) return true;
-    const s = q.toLowerCase();
-    return (
-      safe(item.email).toLowerCase().includes(s) ||
-      safe(item.message).toLowerCase().includes(s) ||
-      safe(item.status).toLowerCase().includes(s) ||
-      safe(item.bot_id).toLowerCase().includes(s)
-    );
-  }
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    function fmtDate(ts){
+      if(!ts) return "—";
+      try { return new Date(ts).toLocaleString(); }
+      catch { return "—"; }
+    }
 
-  function toCSV(rows, columns){
-    const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
-    const header = columns.map(esc).join(",");
-    const lines = rows.map(r => columns.map(c => esc(r[c])).join(","));
-    return [header, ...lines].join("\n");
-  }
+    function safe(v){
+      return (v === null || v === undefined) ? "" : String(v);
+    }
 
-  function download(filename, text){
-    const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+    function toast(msg, sub=""){
+      if(!els.toast) return;
+      els.toast.innerHTML = `<div>${msg}</div>${sub ? `<small>${sub}</small>` : ""}`;
+      els.toast.classList.add("show");
+      setTimeout(()=>els.toast.classList.remove("show"), 2600);
+    }
 
-  // -----------------------------
-  // Fetch (SESSION COOKIE)
-  // -----------------------------
-  async function fetchAll(){
-    try{
-      els.liveDot.style.background = "var(--warn)";
-      els.liveText.textContent = "Syncing…";
+    function setView(view){
+      VIEW = view;
 
-      const [lRes, aRes] = await Promise.all([
-        fetch(ROUTES.leads, { credentials: "include" }),
-        fetch(ROUTES.apps, { credentials: "include" })
-      ]);
+      document.querySelectorAll(".nav button").forEach(b=>{
+        b.classList.toggle("active", b.dataset.view === view);
+      });
 
-      if(await guard401(lRes) || await guard401(aRes)) return;
+      els.viewOverview.style.display = (view === "overview") ? "block" : "none";
+      els.viewLeads.style.display = (view === "leads") ? "block" : "none";
+      els.viewApps.style.display = (view === "appointments") ? "block" : "none";
 
-      const lJson = await lRes.json().catch(()=>[]);
-      const aJson = await aRes.json().catch(()=>[]);
-
-      leads = Array.isArray(lJson) ? lJson : [];
-      apps  = Array.isArray(aJson) ? aJson : [];
-
-      els.lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
-      els.liveDot.style.background = "var(--good)";
-      els.liveText.textContent = "Live";
+      if(view === "overview"){
+        els.pageTitle.textContent = "Overview";
+        els.pageDesc.textContent = "A premium snapshot of your SnowSkye AI performance.";
+      } else if(view === "leads"){
+        els.pageTitle.textContent = "Leads";
+        els.pageDesc.textContent = "Every message and email captured by SnowSkye AI.";
+      } else {
+        els.pageTitle.textContent = "Appointments";
+        els.pageDesc.textContent = "Booking requests detected from user intent.";
+      }
 
       renderAll();
-    }catch(e){
-      els.liveDot.style.background = "var(--bad)";
-      els.liveText.textContent = "Offline";
-      toast("Failed to sync", "Check your server or /api routes.");
-      console.error(e);
     }
-  }
 
-  // -----------------------------
-  // Render
-  // -----------------------------
-  function renderKPIs(){
-    const totalLeads = leads.length;
-    const totalApps  = apps.length;
+    function withinDays(ts, days){
+      if(!ts) return false;
+      const now = Date.now();
+      const t = new Date(ts).getTime();
+      if(Number.isNaN(t)) return false;
+      return (now - t) <= days * 24 * 60 * 60 * 1000;
+    }
 
-    const leadsToday = leads.filter(x => isToday(x.created_at || x.time)).length;
-    const leadsYday  = leads.filter(x => isYesterday(x.created_at || x.time)).length;
+    function isToday(ts){
+      if(!ts) return false;
+      const d = new Date(ts);
+      const now = new Date();
+      return d.toDateString() === now.toDateString();
+    }
 
-    const apps7 = apps.filter(x => withinDays(x.created_at || x.created, 7)).length;
-    const leads7 = leads.filter(x => withinDays(x.created_at || x.time, 7)).length;
+    function isYesterday(ts){
+      if(!ts) return false;
+      const d = new Date(ts);
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      return d.toDateString() === y.toDateString();
+    }
 
-    const pending = apps.filter(x => (x.status || "pending").toLowerCase() === "pending").length;
+    function statusPill(status){
+      const s = (status || "pending").toLowerCase();
+      if(s === "confirmed") return `<span class="pill good">● Confirmed</span>`;
+      if(s === "cancelled") return `<span class="pill bad">● Cancelled</span>`;
+      return `<span class="pill warn">● Pending</span>`;
+    }
 
-    els.kpiLeads.textContent = totalLeads.toLocaleString();
+    function matchSearch(item, q){
+      if(!q) return true;
+      const s = q.toLowerCase();
+      return (
+        safe(item.email).toLowerCase().includes(s) ||
+        safe(item.message).toLowerCase().includes(s) ||
+        safe(item.status).toLowerCase().includes(s) ||
+        safe(item.source).toLowerCase().includes(s)
+      );
+    }
 
-    const delta = leadsToday - leadsYday;
-    const deltaText = (delta === 0) ? "Same as yesterday" : (delta > 0 ? `+${delta} vs yesterday` : `${delta} vs yesterday`);
-    els.kpiLeadsSub.textContent = `${leads7} in last 7 days • ${deltaText}`;
+    function toCSV(rows, columns){
+      const esc = (v) => `"${String(v ?? "").replace(/"/g,'""')}"`;
+      const header = columns.map(esc).join(",");
+      const lines = rows.map(r => columns.map(c => esc(r?.[c])).join(","));
+      return [header, ...lines].join("\n");
+    }
 
-    els.kpiLeadsToday.textContent = leadsToday.toLocaleString();
+    function download(filename, text){
+      const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
 
-    els.kpiApps.textContent = totalApps.toLocaleString();
-    els.kpiAppsSub.textContent = `${apps7} in last 7 days`;
+    // -----------------------------
+    // Fetch (SESSION COOKIE)
+    // -----------------------------
+    async function fetchAll(){
+      try{
+        els.liveDot.style.background = "var(--warn)";
+        els.liveText.textContent = "Syncing…";
 
-    els.kpiPending.textContent = pending.toLocaleString();
-  }
+        const [lRes, aRes] = await Promise.all([
+          fetch(ROUTES.leads, { credentials: "include" }),
+          fetch(ROUTES.apps, { credentials: "include" })
+        ]);
 
-  function renderOverview(){
-    const q = els.search.value.trim();
-    const combined = [
-      ...leads.map(x => ({...x, _type:"lead"})),
-      ...apps.map(x => ({...x, _type:"appointment"}))
-    ]
-    .filter(x => matchSearch(x, q))
-    .sort((a,b) => new Date(b.created_at || b.time || b.created).getTime() - new Date(a.created_at || a.time || a.created).getTime())
-    .slice(0, 12);
+        if(await guard401(lRes) || await guard401(aRes)) return;
 
-    els.countText.textContent = `${combined.length} latest`;
+        const lJson = await lRes.json().catch(()=>[]);
+        const aJson = await aRes.json().catch(()=>[]);
 
-    els.overviewList.innerHTML = "";
-    els.overviewEmpty.style.display = combined.length ? "none" : "block";
+        leads = Array.isArray(lJson) ? lJson : [];
+        apps  = Array.isArray(aJson) ? aJson : [];
 
-    combined.forEach(item=>{
-      const typeTag = item._type === "lead"
-        ? `<span class="pill">📩 Lead</span>`
-        : `<span class="pill">📅 Appointment</span>`;
+        els.lastSync.textContent = "Last sync: " + new Date().toLocaleTimeString();
+        els.liveDot.style.background = "var(--good)";
+        els.liveText.textContent = "Live";
 
-      const statusTag = item._type === "appointment" ? statusPill(item.status) : "";
+        renderAll();
+      }catch(e){
+        els.liveDot.style.background = "var(--bad)";
+        els.liveText.textContent = "Offline";
+        toast("Failed to sync", "Check your server or /api routes.");
+        console.error(e);
+      }
+    }
 
-      const ts = item.created_at || item.time || item.created;
+    // -----------------------------
+    // Render
+    // -----------------------------
+    function renderKPIs(){
+      const totalLeads = leads.length;
+      const totalApps  = apps.length;
 
-      const row = document.createElement("div");
-      row.className = "row";
-      row.innerHTML = `
-        <div class="msg">${safe(item.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
-        <div class="meta2">
-          ${typeTag}
-          ${safe(item.email) ? `<span class="pill">✉ ${safe(item.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
-          ${statusTag}
-        </div>
-        <div class="meta2">
-          <span class="pill">🕒 ${fmtDate(ts)}</span>
-        </div>
-      `;
-      els.overviewList.appendChild(row);
-    });
-  }
+      const leadsToday = leads.filter(x => isToday(x.created_at || x.time)).length;
+      const leadsYday  = leads.filter(x => isYesterday(x.created_at || x.time)).length;
 
-  function renderLeads(){
-    const q = els.search.value.trim();
-    const list = leads
+      const apps7 = apps.filter(x => withinDays(x.created_at || x.created, 7)).length;
+      const leads7 = leads.filter(x => withinDays(x.created_at || x.time, 7)).length;
+
+      const pending = apps.filter(x => (x.status || "pending").toLowerCase() === "pending").length;
+
+      els.kpiLeads.textContent = totalLeads.toLocaleString();
+
+      const delta = leadsToday - leadsYday;
+      const deltaText = (delta === 0) ? "Same as yesterday" : (delta > 0 ? `+${delta} vs yesterday` : `${delta} vs yesterday`);
+      els.kpiLeadsSub.textContent = `${leads7} in last 7 days • ${deltaText}`;
+
+      els.kpiLeadsToday.textContent = leadsToday.toLocaleString();
+
+      els.kpiApps.textContent = totalApps.toLocaleString();
+      els.kpiAppsSub.textContent = `${apps7} in last 7 days`;
+
+      els.kpiPending.textContent = pending.toLocaleString();
+    }
+
+    function renderOverview(){
+      const q = els.search.value.trim();
+      const combined = [
+        ...leads.map(x => ({...x, _type:"lead"})),
+        ...apps.map(x => ({...x, _type:"appointment"}))
+      ]
       .filter(x => matchSearch(x, q))
-      .sort((a,b) => new Date(b.created_at || b.time).getTime() - new Date(a.created_at || a.time).getTime());
+      .sort((a,b) => new Date(b.created_at || b.time || b.created).getTime() - new Date(a.created_at || a.time || a.created).getTime())
+      .slice(0, 12);
 
-    els.leadCountPill.textContent = `${list.length} leads`;
-    els.leadsList.innerHTML = "";
-    els.leadsEmpty.style.display = list.length ? "none" : "block";
+      els.countText.textContent = `${combined.length} latest`;
 
-    list.forEach(l=>{
-      const ts = l.created_at || l.time;
+      els.overviewList.innerHTML = "";
+      els.overviewEmpty.style.display = combined.length ? "none" : "block";
 
-      const row = document.createElement("div");
-      row.className = "row";
-      row.innerHTML = `
-        <div class="msg">${safe(l.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
-        <div class="meta2">
-          ${safe(l.email) ? `<span class="pill">✉ ${safe(l.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
-        </div>
-        <div class="meta2">
-          <span class="pill">🕒 ${fmtDate(ts)}</span>
-          <button class="btn secondary" style="padding:8px 10px;border-radius:12px" data-copy="${safe(l.email)}">Copy email</button>
-        </div>
-      `;
-      els.leadsList.appendChild(row);
+      combined.forEach(item=>{
+        const typeTag = item._type === "lead"
+          ? `<span class="pill">📩 Lead</span>`
+          : `<span class="pill">📅 Appointment</span>`;
+
+        const statusTag = item._type === "appointment" ? statusPill(item.status) : "";
+
+        const ts = item.created_at || item.time || item.created;
+
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+          <div class="msg">${safe(item.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+          <div class="meta2">
+            ${typeTag}
+            ${safe(item.email) ? `<span class="pill">✉ ${safe(item.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+            ${statusTag}
+          </div>
+          <div class="meta2">
+            <span class="pill">🕒 ${fmtDate(ts)}</span>
+          </div>
+        `;
+        els.overviewList.appendChild(row);
+      });
+    }
+
+    function renderLeads(){
+      const q = els.search.value.trim();
+      const list = leads
+        .filter(x => matchSearch(x, q))
+        .sort((a,b) => new Date(b.created_at || b.time).getTime() - new Date(a.created_at || a.time).getTime());
+
+      els.leadCountPill.textContent = `${list.length} leads`;
+      els.leadsList.innerHTML = "";
+      els.leadsEmpty.style.display = list.length ? "none" : "block";
+
+      list.forEach(l=>{
+        const ts = l.created_at || l.time;
+
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+          <div class="msg">${safe(l.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+          <div class="meta2">
+            ${safe(l.email) ? `<span class="pill">✉ ${safe(l.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+          </div>
+          <div class="meta2">
+            <span class="pill">🕒 ${fmtDate(ts)}</span>
+            <button class="btn secondary" style="padding:8px 10px;border-radius:12px" data-copy="${safe(l.email)}">Copy email</button>
+          </div>
+        `;
+        els.leadsList.appendChild(row);
+      });
+
+      els.leadsList.querySelectorAll("button[data-copy]").forEach(btn=>{
+        btn.onclick = async () => {
+          const val = btn.getAttribute("data-copy");
+          if(!val){ toast("No email to copy"); return; }
+          try{
+            await navigator.clipboard.writeText(val);
+            toast("Copied!", val);
+          }catch{
+            toast("Copy failed");
+          }
+        };
+      });
+    }
+
+    function renderAppointments(){
+      const q = els.search.value.trim();
+      const status = els.statusFilter ? els.statusFilter.value : "all";
+
+      let list = apps
+        .filter(x => matchSearch(x, q))
+        .sort((a,b) => new Date(b.created_at || b.created).getTime() - new Date(a.created_at || a.created).getTime());
+
+      if(status !== "all"){
+        list = list.filter(x => (x.status || "pending").toLowerCase() === status);
+      }
+
+      els.appCountPill.textContent = `${list.length} appointments`;
+      els.appsList.innerHTML = "";
+      els.appsEmpty.style.display = list.length ? "none" : "block";
+
+      list.forEach(a=>{
+        const ts = a.created_at || a.created;
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+          <div class="msg">${safe(a.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
+          <div class="meta2">
+            ${safe(a.email) ? `<span class="pill">✉ ${safe(a.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
+            ${statusPill(a.status)}
+          </div>
+          <div class="meta2">
+            <span class="pill">🕒 ${fmtDate(ts)}</span>
+            <span class="pill">🧾 ID: ${safe(a.id).slice(0,8) || "—"}</span>
+          </div>
+        `;
+        els.appsList.appendChild(row);
+      });
+    }
+
+    function renderAll(){
+      renderKPIs();
+      if(VIEW === "overview") renderOverview();
+      if(VIEW === "leads") renderLeads();
+      if(VIEW === "appointments") renderAppointments();
+    }
+
+    // -----------------------------
+    // Events
+    // -----------------------------
+    document.querySelectorAll(".nav button").forEach(btn=>{
+      btn.addEventListener("click", ()=> setView(btn.dataset.view));
     });
 
-    els.leadsList.querySelectorAll("button[data-copy]").forEach(btn=>{
-      btn.onclick = async () => {
-        const val = btn.getAttribute("data-copy");
-        if(!val){ toast("No email to copy"); return; }
-        try{
-          await navigator.clipboard.writeText(val);
-          toast("Copied!", val);
-        }catch{
-          toast("Copy failed");
-        }
-      };
-    });
-  }
+    els.search.addEventListener("input", ()=> renderAll());
+    els.statusFilter?.addEventListener("change", ()=> renderAll());
 
-  function renderAppointments(){
-    const q = els.search.value.trim();
-    const status = els.statusFilter.value;
+    els.refreshBtn.onclick = () => {
+      toast("Refreshing…");
+      fetchAll();
+    };
 
-    let list = apps
-      .filter(x => matchSearch(x, q))
-      .sort((a,b) => new Date(b.created_at || b.created).getTime() - new Date(a.created_at || a.created).getTime());
+    els.autoSwitch.onclick = () => {
+      autoRefresh = !autoRefresh;
+      els.autoSwitch.classList.toggle("on", autoRefresh);
+      toast(autoRefresh ? "Auto refresh ON" : "Auto refresh OFF");
+      setupTimer();
+    };
 
-    if(status !== "all"){
-      list = list.filter(x => (x.status || "pending").toLowerCase() === status);
+    els.logoutBtn.onclick = async () => {
+      try{
+        await fetch(ROUTES.logout, { method: "POST", credentials: "include" });
+      }catch{}
+      window.location.href = ROUTES.loginPage;
+    };
+
+    els.exportBtn.onclick = () => {
+      const ts = Date.now();
+
+      const leadsNormalized = leads.map(x => ({
+        id: x.id || "",
+        email: x.email || "",
+        message: x.message || "",
+        time: x.time || x.created_at || ""
+      }));
+
+      const appsNormalized = apps.map(x => ({
+        id: x.id || "",
+        email: x.email || "",
+        message: x.message || "",
+        status: x.status || "pending",
+        created: x.created || x.created_at || ""
+      }));
+
+      if(VIEW === "leads"){
+        download(`snowskye_leads_${ts}.csv`, toCSV(leadsNormalized, ["id","email","message","time"]));
+        toast("Exported CSV", "Leads downloaded.");
+        return;
+      }
+      if(VIEW === "appointments"){
+        download(`snowskye_appointments_${ts}.csv`, toCSV(appsNormalized, ["id","email","message","status","created"]));
+        toast("Exported CSV", "Appointments downloaded.");
+        return;
+      }
+
+      // overview exports both
+      download(`snowskye_leads_${ts}.csv`, toCSV(leadsNormalized, ["id","email","message","time"]));
+      download(`snowskye_appointments_${ts}.csv`, toCSV(appsNormalized, ["id","email","message","status","created"]));
+      toast("Exported CSV", "Leads + Appointments downloaded.");
+    };
+
+    function setupTimer(){
+      if(timer) clearInterval(timer);
+      if(autoRefresh){
+        timer = setInterval(fetchAll, 15000);
+      }
     }
 
-    els.appCountPill.textContent = `${list.length} appointments`;
-    els.appsList.innerHTML = "";
-    els.appsEmpty.style.display = list.length ? "none" : "block";
+    // -----------------------------
+    // Boot (ensure session first)
+    // -----------------------------
+    (async ()=>{
+      const ok = await ensureSession();
+      if(!ok) return;
 
-    list.forEach(a=>{
-      const ts = a.created_at || a.created;
-      const row = document.createElement("div");
-      row.className = "row";
-      row.innerHTML = `
-        <div class="msg">${safe(a.message) || "<em style='color:var(--muted)'>No message</em>"}</div>
-        <div class="meta2">
-          ${safe(a.email) ? `<span class="pill">✉ ${safe(a.email)}</span>` : `<span class="pill">✉ (no email)</span>`}
-          ${statusPill(a.status)}
-        </div>
-        <div class="meta2">
-          <span class="pill">🕒 ${fmtDate(ts)}</span>
-          <span class="pill">🧾 ID: ${safe(a.id).slice(0,8) || "—"}</span>
-        </div>
-      `;
-      els.appsList.appendChild(row);
-    });
-  }
-
-  function renderAll(){
-    renderKPIs();
-    if(VIEW === "overview") renderOverview();
-    if(VIEW === "leads") renderLeads();
-    if(VIEW === "appointments") renderAppointments();
-  }
-
-  // -----------------------------
-  // Events
-  // -----------------------------
-  document.querySelectorAll(".nav button").forEach(btn=>{
-    btn.addEventListener("click", ()=> setView(btn.dataset.view));
-  });
-
-  els.search.addEventListener("input", ()=> renderAll());
-  els.statusFilter.addEventListener("change", ()=> renderAll());
-
-  els.refreshBtn.onclick = () => {
-    toast("Refreshing…");
-    fetchAll();
-  };
-
-  els.autoSwitch.onclick = () => {
-    autoRefresh = !autoRefresh;
-    els.autoSwitch.classList.toggle("on", autoRefresh);
-    toast(autoRefresh ? "Auto refresh ON" : "Auto refresh OFF");
-    setupTimer();
-  };
-
-  els.logoutBtn.onclick = async () => {
-    try{
-      await fetch(ROUTES.logout, { method: "POST", credentials: "include" });
-    }catch{}
-    try{ localStorage.removeItem("token"); }catch{}
-    window.location.href = "/login";// ✅ FIXED
-  };
-
-  els.exportBtn.onclick = () => {
-    if(VIEW === "leads"){
-      const columns = ["id","email","message","time"];
-      const csv = toCSV(leads, columns);
-      download(`snowskye_leads_${Date.now()}.csv`, csv);
-      toast("Exported CSV", "Leads downloaded.");
-      return;
-    }
-    if(VIEW === "appointments"){
-      const columns = ["id","email","message","status","created"];
-      const csv = toCSV(apps, columns);
-      download(`snowskye_appointments_${Date.now()}.csv`, csv);
-      toast("Exported CSV", "Appointments downloaded.");
-      return;
-    }
-
-    const columnsL = ["id","email","message","time"];
-    const columnsA = ["id","email","message","status","created"];
-    download(`snowskye_leads_${Date.now()}.csv`, toCSV(leads, columnsL));
-    download(`snowskye_appointments_${Date.now()}.csv`, toCSV(apps, columnsA));
-    toast("Exported CSV", "Leads + Appointments downloaded.");
-  };
-
-  function setupTimer(){
-    if(timer) clearInterval(timer);
-    if(autoRefresh){
-      timer = setInterval(fetchAll, 15000);
-    }
-  }
-
-  // -----------------------------
-  // Boot (✅ ensure session first)
-  // -----------------------------
-  (async ()=>{
-    const ok = await ensureSession();
-    if(!ok) return;
-
-    setView("overview");
-    await fetchAll();
-    setupTimer();
-  })();
-</script>
+      setView("overview");
+      await fetchAll();
+      setupTimer();
+    })();
+  </script>
 </body>
 </html>

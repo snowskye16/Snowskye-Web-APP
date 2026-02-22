@@ -1,12 +1,13 @@
 /**
- * ✅ SnowSkyeAI server.js (FULL FIXED + PREMIUM)
- * Based on YOUR server.js, with these fixes:
- * - ✅ Fix broken comment `//*` -> proper block comment
- * - ✅ Remove duplicate `rateLimit` declaration
- * - ✅ Remove duplicate `/api/chat` handler (keep only ONE real handler)
- * - ✅ Keep `/chat` alias forwarding to `/api/chat` for widget compatibility
- * - ✅ Add `proxy: true` for Render cookies
- * - ✅ Keep your /login and /dashboard protected routes (nice UX)
+ * ✅ SnowSkyeAI server.js (FULL + PREMIUM UPGRADE)
+ * Based on YOUR current server.js, with upgrades:
+ * - ✅ Public website works on your URL (serves /public/index.html)
+ * - ✅ Widget + website chat both work (/api/chat + /chat alias)
+ * - ✅ AI ALWAYS replies (OpenAI failure => smart fallback reply)
+ * - ✅ Always saves leads (DB failure never blocks reply)
+ * - ✅ Strong lead-capture flow (asks for email + business info)
+ * - ✅ Protected dashboard (/dashboard) + login (/login)
+ * - ✅ Render-ready sessions (proxy + secure cookies)
  */
 
 require("dotenv").config();
@@ -67,9 +68,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 /* =========================
    OPENAI (optional)
 ========================= */
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 /* =========================
    SECURITY + MIDDLEWARE
@@ -125,10 +124,9 @@ const leadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// widget-specific limiter (your request)
 const widgetLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20, // 20 requests/min per IP
+  windowMs: 60 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -144,10 +142,10 @@ app.use(
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
-    proxy: true, // ✅ IMPORTANT on Render / proxies
+    proxy: true, // ✅ IMPORTANT on Render
     cookie: {
       httpOnly: true,
-      secure: IS_PROD, // Render uses HTTPS in prod
+      secure: IS_PROD, // ✅ Render prod is HTTPS
       sameSite: IS_PROD ? (CROSS_SITE ? "none" : "lax") : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
@@ -178,13 +176,10 @@ function requireAuth(req, res, next) {
 }
 function looksLikeBookingIntent(message) {
   const m = String(message || "").toLowerCase();
-  return (
-    m.includes("book") ||
-    m.includes("appointment") ||
-    m.includes("schedule") ||
-    m.includes("call") ||
-    m.includes("consult")
-  );
+  return m.includes("book") || m.includes("appointment") || m.includes("schedule") || m.includes("call") || m.includes("consult");
+}
+function looksLikeEmailInText(message) {
+  return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(String(message || ""));
 }
 function guardMessage(message) {
   const m = String(message || "").trim();
@@ -213,11 +208,35 @@ RULES:
 - Professional, confident, concise
 - Ask 1–2 questions at a time
 - If user asks pricing: give packages/ranges then ask requirements
+- Always try to capture a lead email gently
 - Never claim an appointment is confirmed unless staff confirms
 
 User message:
 ${userMessage}
 `.trim();
+}
+
+/* =========================
+   FALLBACK (Always Reply)
+========================= */
+const FALLBACK = {
+  greet: "Hi! I’m SnowSkyeAI. What type of business do you run and what’s your goal (leads, sales, or automation)?",
+  askGoal: "Got it. What’s your #1 goal right now — more leads, more sales, or automate support?",
+  askEmail: "What’s the best email to follow up with you? (So I can send the next steps.)",
+  pricing:
+    "Pricing is one-time (no monthly fees): Starter $100 (chatbot), Popular $300 (website + chatbot + lead automation), Premium $500 (full system). What business type are you building for?",
+  booking: "To book: send your name, email, preferred date/time, and timezone. I’ll mark it as pending for follow-up.",
+  offline: "I can still help even if AI is busy. What’s your business type and what do you want to achieve?",
+};
+
+function fallbackReply(message) {
+  const m = String(message || "").toLowerCase();
+
+  if (m.includes("price") || m.includes("pricing") || m.includes("how much")) return FALLBACK.pricing;
+  if (looksLikeBookingIntent(m)) return FALLBACK.booking;
+  if (m.includes("website")) return "Nice — what kind of website do you need (clinic, agency, e-commerce, personal brand)?";
+  if (m.includes("chatbot")) return "Great — what platform do you want the chatbot on (website, Facebook, IG, WhatsApp)?";
+  return FALLBACK.askGoal;
 }
 
 /* =========================
@@ -240,17 +259,11 @@ app.post("/api/admin/register", authLimiter, async (req, res) => {
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: "Invalid email" });
     if (password.length < 6) return res.status(400).json({ ok: false, error: "Password must be at least 6 characters" });
 
-    const { data: existing, error: e1 } = await supabase
-      .from("admin_users")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
+    const { data: existing, error: e1 } = await supabase.from("admin_users").select("id").eq("email", email).maybeSingle();
     if (e1) return res.status(500).json({ ok: false, error: "DB error" });
     if (existing) return res.status(409).json({ ok: false, error: "Admin already exists" });
 
     const password_hash = await bcrypt.hash(password, 10);
-
     const { error: e2 } = await supabase.from("admin_users").insert([{ email, password_hash, role: "admin" }]);
     if (e2) return res.status(500).json({ ok: false, error: "DB insert error" });
 
@@ -282,8 +295,6 @@ app.post("/api/login", authLimiter, async (req, res) => {
     if (!valid) return res.status(401).json({ ok: false, error: "Invalid login" });
 
     req.session.user = { id: user.id, email: user.email, role: user.role };
-
-    // (optional) ensure session saved before responding
     req.session.save(() => res.json({ ok: true, success: true, user: req.session.user }));
   } catch (e) {
     console.error("login error:", e);
@@ -291,7 +302,7 @@ app.post("/api/login", authLimiter, async (req, res) => {
   }
 });
 
-// Compatibility alias for your login.html (if it calls /admin/login)
+// Compatibility alias (if login.html calls /admin/login)
 app.post("/admin/login", authLimiter, (req, res, next) => {
   req.url = "/api/login";
   next();
@@ -300,8 +311,6 @@ app.post("/admin/login", authLimiter, (req, res, next) => {
 app.post("/api/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true, success: true }));
 });
-
-// Compatibility alias (your dashboard uses /logout)
 app.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true, success: true }));
 });
@@ -328,7 +337,7 @@ async function getLeads(req, res) {
       id: x.id,
       email: x.email || "",
       message: x.message || "",
-      time: x.created_at, // dashboard uses "time"
+      time: x.created_at,
       created_at: x.created_at,
       source: x.source || "chat",
       session_id: x.session_id || "",
@@ -351,7 +360,7 @@ async function getAppointments(req, res) {
       email: x.email || "",
       message: x.message || "",
       status: x.status || "pending",
-      created: x.created_at, // dashboard uses "created"
+      created: x.created_at,
       created_at: x.created_at,
     }))
   );
@@ -359,22 +368,15 @@ async function getAppointments(req, res) {
 
 app.get("/api/admin/leads", requireAuth, getLeads);
 app.get("/api/admin/appointments", requireAuth, getAppointments);
-
-// Compatibility routes (your dashboard fetches these)
 app.get("/api/leads", requireAuth, getLeads);
 app.get("/api/appointments", requireAuth, getAppointments);
 
 /* =========================
-   PUBLIC RECENT (Widget Activity tab)
+   PUBLIC RECENT (Widget Activity)
 ========================= */
 app.get("/api/public/recent", async (req, res) => {
   try {
-    const { data: leads } = await supabase
-      .from("leads")
-      .select("message,created_at")
-      .order("created_at", { ascending: false })
-      .limit(8);
-
+    const { data: leads } = await supabase.from("leads").select("message,created_at").order("created_at", { ascending: false }).limit(8);
     const { data: appointments } = await supabase
       .from("appointments")
       .select("message,status,created_at")
@@ -383,15 +385,8 @@ app.get("/api/public/recent", async (req, res) => {
 
     res.json({
       ok: true,
-      leads: (leads || []).map((l) => ({
-        message: safeShort(l.message, 140),
-        time: l.created_at,
-      })),
-      appointments: (appointments || []).map((a) => ({
-        message: safeShort(a.message, 140),
-        status: a.status || "pending",
-        created_at: a.created_at,
-      })),
+      leads: (leads || []).map((l) => ({ message: safeShort(l.message, 140), time: l.created_at })),
+      appointments: (appointments || []).map((a) => ({ message: safeShort(a.message, 140), status: a.status || "pending", created_at: a.created_at })),
     });
   } catch (e) {
     res.status(200).json({ ok: false, leads: [], appointments: [] });
@@ -399,16 +394,16 @@ app.get("/api/public/recent", async (req, res) => {
 });
 
 /* =========================
-   CHAT (Widget + Contact pages)
+   CHAT (Website + Widget)
 ========================= */
 
-// ✅ Compatibility alias for widget (your widget calls `${API_BASE}/chat`)
+// ✅ Compatibility alias for widget calling /chat
 app.post("/chat", widgetLimiter, (req, res, next) => {
   req.url = "/api/chat";
   next();
 });
 
-// ✅ One real handler only
+// ✅ One REAL handler only
 app.post("/api/chat", chatLimiter, async (req, res) => {
   const started = Date.now();
 
@@ -421,7 +416,7 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
 
-    // 1) Save lead (never block reply)
+    // ✅ Always save lead (never block reply)
     try {
       await supabase.from("leads").insert([
         {
@@ -435,8 +430,9 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
       console.error("leads insert failed:", dbErr?.message || dbErr);
     }
 
-    // 2) AI reply
-    let reply = "AI not configured. Set OPENAI_API_KEY.";
+    // ✅ AI reply, fallback always
+    let reply = "";
+    let usedAI = false;
 
     if (openai) {
       try {
@@ -445,14 +441,18 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
           input: businessBrain(message),
           temperature: 0.7,
         });
-        reply = ai.output_text || "Sorry, I couldn't generate a reply.";
+        reply = ai.output_text || "";
+        usedAI = Boolean(reply);
       } catch (aiErr) {
         console.error("openai error:", aiErr?.message || aiErr);
-        reply = "Assistant temporarily unavailable. Please try again in a moment.";
       }
     }
 
-    // 3) Booking intent => also try saving appointment
+    // ✅ If AI fails, we still reply like a business brain
+    if (!reply) reply = fallbackReply(message);
+    if (!reply) reply = FALLBACK.offline;
+
+    // ✅ Booking intent => save appointment (don’t block reply)
     if (looksLikeBookingIntent(message)) {
       try {
         await supabase.from("appointments").insert([
@@ -466,29 +466,27 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
         console.error("appointments insert failed:", dbErr?.message || dbErr);
       }
 
-      reply += "\n\n📅 To book: send your name + email + preferred date/time + timezone.";
+      reply += "\n\n📅 To book faster: send your name + email + preferred date/time + timezone.";
     }
 
-    res.json({ ok: true, reply, ms: Date.now() - started });
+    // ✅ Strong lead capture (ask email if not provided)
+    if (!email && !looksLikeEmailInText(message)) {
+      reply += "\n\n✉️ What’s the best email to follow up with you?";
+    }
+
+    res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
   } catch (e) {
-    console.error("chat route error:", e);
-    res.status(500).json({ ok: false, reply: "Assistant temporarily unavailable." });
+    console.error("chat route fatal:", e);
+    res.json({ ok: true, reply: FALLBACK.greet, ai: false });
   }
 });
 
-// ✅ Prevent GET /chat 404 (browser probe / devtools)
-app.get("/chat", (req, res) => {
-  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
-});
-
-// Optional: also prevent GET /api/chat 404
-app.get("/api/chat", (req, res) => {
-  res.status(200).json({ ok: true, note: "Use POST /api/chat" });
-});
+// ✅ Prevent GET /chat 404
+app.get("/chat", (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
+app.get("/api/chat", (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
 
 /* =========================
    LEAD FORM COMPATIBILITY
-   Your old pages POST /lead
 ========================= */
 app.post("/lead", leadLimiter, async (req, res) => {
   try {
@@ -512,22 +510,19 @@ app.post("/lead", leadLimiter, async (req, res) => {
   }
 });
 
-// Optional: also accept /api/lead
 app.post("/api/lead", leadLimiter, (req, res, next) => {
   req.url = "/lead";
   next();
 });
 
 /* =========================
-   HOME + ROUTES + FALLBACK
+   ROUTES + FALLBACK
 ========================= */
 
 // Home
-app.get("/", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-});
+app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
 
-// ✅ Nice routes (optional but premium)
+// Nice routes
 app.get("/login", (req, res) => {
   if (req.session?.user) return res.redirect("/dashboard");
   return res.sendFile(path.join(PUBLIC_DIR, "login.html"));
@@ -540,11 +535,7 @@ app.get("/dashboard", (req, res) => {
 
 // ✅ Only fallback for pages (NOT files)
 app.get("*", (req, res) => {
-  // If request looks like a file (has a dot), do NOT serve index.html
-  // This avoids breaking /widget.js, /icon-192.png, etc.
-  if (req.path.includes(".")) {
-    return res.status(404).send("Not found");
-  }
+  if (req.path.includes(".")) return res.status(404).send("Not found");
   return res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
