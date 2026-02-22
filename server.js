@@ -18,7 +18,7 @@ const app = express();
 
 //* =========================
    CONFIG
-========================= */
+
 const PORT = Number(process.env.PORT || 3000);
 const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PROD = NODE_ENV === "production";
@@ -110,9 +110,12 @@ app.use(
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
+
+    proxy: true, // ✅ IMPORTANT on Render / proxies
+
     cookie: {
       httpOnly: true,
-      secure: IS_PROD, // MUST be true on HTTPS in prod
+      secure: IS_PROD, // Render prod = HTTPS => true
       sameSite: IS_PROD ? (CROSS_SITE ? "none" : "lax") : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
