@@ -1,15 +1,14 @@
 /**
- * ✅ SnowSkyeAI server.js (PREMIUM + FIXED CHAT FLOW)
+ * ✅ SnowSkyeAI server.js (UPGRADED + WIDGET FIX + NO-LOOP LEAD FLOW)
  *
- * Goals:
- * ✅ Widget works cross-domain without cookies (public routes)
- * ✅ Admin dashboard uses sessions (same domain)
- * ✅ ALWAYS replies (OpenAI down => premium fallback)
- * ✅ Smarter lead flow (no email spam on "hi")
- * ✅ Email capture stops repeating once captured (per sessionId)
- * ✅ “Thanks” only once (no repeating)
- * ✅ Saves leads + booking intent to Supabase (never blocks reply)
- * ✅ Optional: quick debug route for widget file
+ * What’s improved vs your version:
+ * ✅ /widget.js is forced to serve real JS (correct MIME + clear 404)
+ * ✅ Widget assets (/icon-192.png etc) remain cross-domain friendly
+ * ✅ Session-based anti-loop questions (won't repeat same questions)
+ * ✅ Stable "ask email" behavior (won't keep nagging)
+ * ✅ Optional in-memory chat history for better AI continuity
+ * ✅ Still ALWAYS replies (OpenAI down => premium fallback)
+ * ✅ Lead + appointment saving never blocks replies
  */
 
 require("dotenv").config();
@@ -38,7 +37,7 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PROD = NODE_ENV === "production";
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-// CORS allowlist (recommended once your front-end domain is final)
+// CORS allowlist (optional)
 const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || "").trim();
 const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || "")
   .split(",")
@@ -101,18 +100,21 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 25,
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 35,
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 const leadLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -170,15 +172,30 @@ app.use(
 /* =========================
    STATIC (serve /public)
 ========================= */
+
+// Cache widget.js for 1 day
 app.use((req, res, next) => {
   if (req.path === "/widget.js") {
-    res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day
+    res.setHeader("Cache-Control", "public, max-age=86400");
   }
   next();
 });
+
+// Serve public assets
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
-// Optional: clear debug to confirm widget exists on server
+// ✅ HARD FIX: Force /widget.js to be served as JavaScript (correct MIME, clear error)
+app.get("/widget.js", (req, res) => {
+  const filePath = path.join(PUBLIC_DIR, "widget.js");
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).type("text/plain").send("widget.js not found in /public");
+  }
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.sendFile(filePath);
+});
+
+// Optional: debug to confirm files deployed
 app.get("/debug/public-files", (req, res) => {
   try {
     const files = fs.readdirSync(PUBLIC_DIR);
@@ -224,67 +241,6 @@ function extractEmailFromText(text) {
   const match = t.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
   return match ? normalizeEmail(match[0]) : "";
 }
-
-/* =========================
-   SESSION MEMORY (PREMIUM FLOW)
-========================= */
-// sessionMemory.get(sessionId) => {
-//   email, emailCapturedAt, askedEmailAt,
-//   msgCount, thankedAt
-// }
-const sessionMemory = new Map();
-
-function getSessionMem(sessionId) {
-  if (!sessionId) return null;
-  const v = sessionMemory.get(sessionId) || null;
-  if (!v) return null;
-
-  // TTL cleanup: 14 days
-  const ttlMs = 14 * 24 * 60 * 60 * 1000;
-  const last = v.emailCapturedAt || v.askedEmailAt || v.thankedAt || 0;
-  if (last && Date.now() - last > ttlMs) {
-    sessionMemory.delete(sessionId);
-    return null;
-  }
-  return v;
-}
-
-function setSessionEmail(sessionId, email) {
-  if (!sessionId || !email) return;
-  sessionMemory.set(sessionId, {
-    ...(sessionMemory.get(sessionId) || {}),
-    email,
-    emailCapturedAt: Date.now(),
-  });
-}
-
-function markAskedEmail(sessionId) {
-  if (!sessionId) return;
-  sessionMemory.set(sessionId, {
-    ...(sessionMemory.get(sessionId) || {}),
-    askedEmailAt: Date.now(),
-  });
-}
-
-function bumpMsgCount(sessionId) {
-  if (!sessionId) return 0;
-  const cur = sessionMemory.get(sessionId) || {};
-  const next = (cur.msgCount || 0) + 1;
-  sessionMemory.set(sessionId, { ...cur, msgCount: next });
-  return next;
-}
-
-function markThanked(sessionId) {
-  if (!sessionId) return;
-  const cur = sessionMemory.get(sessionId) || {};
-  sessionMemory.set(sessionId, { ...cur, thankedAt: Date.now() });
-}
-
-function hasThanked(sessionId) {
-  const cur = getSessionMem(sessionId);
-  return Boolean(cur?.thankedAt);
-}
-
 function looksLikeLeadIntent(message) {
   const m = String(message || "").toLowerCase();
   return (
@@ -301,44 +257,146 @@ function looksLikeLeadIntent(message) {
   );
 }
 
+/* =========================
+   SESSION MEMORY (ANTI-LOOP)
+========================= */
+// sessionMemory.get(sessionId) => {
+//   email, emailCapturedAt, askedEmailAt,
+//   msgCount, thankedAt,
+//   lastQuestion, lastQuestionAt,
+//   history: [{role, content, ts}, ...]
+// }
+const sessionMemory = new Map();
+
+function getSessionMem(sessionId) {
+  if (!sessionId) return null;
+  const v = sessionMemory.get(sessionId) || null;
+  if (!v) return null;
+
+  // TTL cleanup: 14 days
+  const ttlMs = 14 * 24 * 60 * 60 * 1000;
+  const last =
+    v.lastQuestionAt ||
+    v.emailCapturedAt ||
+    v.askedEmailAt ||
+    v.thankedAt ||
+    (v.history?.length ? v.history[v.history.length - 1].ts : 0) ||
+    0;
+
+  if (last && Date.now() - last > ttlMs) {
+    sessionMemory.delete(sessionId);
+    return null;
+  }
+  return v;
+}
+
+function bumpMsgCount(sessionId) {
+  if (!sessionId) return 0;
+  const cur = sessionMemory.get(sessionId) || {};
+  const next = (cur.msgCount || 0) + 1;
+  sessionMemory.set(sessionId, { ...cur, msgCount: next });
+  return next;
+}
+
+function setSessionEmail(sessionId, email) {
+  if (!sessionId || !email) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  sessionMemory.set(sessionId, { ...cur, email, emailCapturedAt: Date.now() });
+}
+
+function markAskedEmail(sessionId) {
+  if (!sessionId) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  sessionMemory.set(sessionId, { ...cur, askedEmailAt: Date.now() });
+}
+
+function markThanked(sessionId) {
+  if (!sessionId) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  sessionMemory.set(sessionId, { ...cur, thankedAt: Date.now() });
+}
+
+function hasThanked(sessionId) {
+  const cur = getSessionMem(sessionId);
+  return Boolean(cur?.thankedAt);
+}
+
+function setLastQuestion(sessionId, qKey) {
+  if (!sessionId || !qKey) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  sessionMemory.set(sessionId, { ...cur, lastQuestion: qKey, lastQuestionAt: Date.now() });
+}
+
+function lastQuestionIs(sessionId, qKey, withinMs = 10 * 60 * 1000) {
+  const cur = getSessionMem(sessionId);
+  if (!cur?.lastQuestion || cur.lastQuestion !== qKey) return false;
+  if (!cur.lastQuestionAt) return true;
+  return Date.now() - cur.lastQuestionAt < withinMs;
+}
+
+// Optional: keep short chat history for AI continuity (prevents repetitive AI)
+function pushHistory(sessionId, role, content, maxItems = 10) {
+  if (!sessionId) return;
+  const cur = sessionMemory.get(sessionId) || {};
+  const history = Array.isArray(cur.history) ? cur.history : [];
+  history.push({ role, content: cleanText(content, 800), ts: Date.now() });
+
+  // Keep last N items
+  const trimmed = history.slice(-maxItems);
+  sessionMemory.set(sessionId, { ...cur, history: trimmed });
+}
+
+function getHistory(sessionId) {
+  const cur = getSessionMem(sessionId);
+  return Array.isArray(cur?.history) ? cur.history : [];
+}
+
+// Improved: ask email only once per 30 minutes, and only after intent or 3+ messages
 function shouldAskEmail(sessionId, message, msgCount) {
   const mem = getSessionMem(sessionId);
   if (mem?.email) return false;
 
-  // Don’t ask on first message unless strong intent
-  const strongIntent = looksLikeLeadIntent(message);
-  if (!strongIntent && (msgCount || 0) < 2) return false;
+  // ✅ no nagging
+  if (lastQuestionIs(sessionId, "ASK_EMAIL", 30 * 60 * 1000)) return false;
 
-  const asked = mem?.askedEmailAt || 0;
-  const cooldownMs = 5 * 60 * 1000;
-  return !asked || Date.now() - asked > cooldownMs;
+  const strongIntent = looksLikeLeadIntent(message);
+  if (!strongIntent && (msgCount || 0) < 3) return false;
+
+  return true;
 }
 
 /* =========================
    AI PROMPT
 ========================= */
-function businessBrain(userMessage) {
+function businessBrain(userMessage, history) {
+  const prior = (history || [])
+    .map((h) => `${h.role.toUpperCase()}: ${h.content}`)
+    .join("\n")
+    .slice(-4000);
+
   return `
-You are SnowSkyeAI's premium AI assistant for an AI Website + Chatbot agency.
+You are SnowSkyeAI's premium assistant for an AI Website + Chatbot agency.
 
 GOALS:
 - Explain services (websites, chatbots, automation, booking, lead capture)
 - Qualify leads (business type, goal, timeline, budget)
 - Convert to next step (book a call / leave contact)
 
-RULES:
-- Professional, confident, concise
-- Ask 1–2 questions at a time
-- If user asks pricing: give packages/ranges then ask requirements
-- Never claim an appointment is confirmed unless a human confirms
+ANTI-LOOP RULES:
+- Do NOT repeat the same question if it was just asked.
+- Ask only 1 question at a time.
+- If user ignores a question, switch to offering options instead of repeating.
 
-User message:
+CONTEXT (chat so far):
+${prior || "(none)"}
+
+USER:
 ${userMessage}
 `.trim();
 }
 
 /* =========================
-   PREMIUM FALLBACK (ALWAYS REPLY)
+   PREMIUM FALLBACK (ANTI-LOOP)
 ========================= */
 const FALLBACK = {
   greet: "Hi! I’m SnowSkyeAI. What type of business do you run and what’s your goal (leads, sales, or automation)?",
@@ -351,30 +409,61 @@ const FALLBACK = {
 function premiumFallbackReply(message, sessionId) {
   const m = String(message || "").toLowerCase();
 
-  // Light intent routing
+  // Pricing intent
   if (m.includes("price") || m.includes("pricing") || m.includes("how much") || m.includes("cost")) {
+    setLastQuestion(sessionId, "PRICING");
     return FALLBACK.pricing;
   }
+
+  // Booking intent
   if (looksLikeBookingIntent(m)) {
+    setLastQuestion(sessionId, "BOOKING");
     return FALLBACK.booking;
   }
 
-  // Quick qualification prompts (1–2 questions max)
+  // Website/chatbot targeted questions (rotating)
   if (m.includes("website")) {
-    return "Nice — what kind of website is it (clinic, agency, e-commerce, personal brand)? Also, do you already have a domain/logo?";
-  }
-  if (m.includes("chatbot")) {
-    return "Great — where do you want the chatbot (website, Facebook, Instagram, WhatsApp)? And what should it do: answer FAQs, capture leads, or take bookings?";
+    if (!lastQuestionIs(sessionId, "WEBSITE_Q")) {
+      setLastQuestion(sessionId, "WEBSITE_Q");
+      return "Nice — what type of website is it (clinic, agency, e-commerce, personal brand)?";
+    }
+    if (!lastQuestionIs(sessionId, "WEBSITE_FEATURES_Q")) {
+      setLastQuestion(sessionId, "WEBSITE_FEATURES_Q");
+      return "Do you need booking, payments, portfolio, or a lead form? (pick 1–2)";
+    }
   }
 
-  // Default: smart business questions
-  return "Got it. What type of business is this, and what’s your #1 goal — more leads, more sales, or automate support?";
+  if (m.includes("chatbot")) {
+    if (!lastQuestionIs(sessionId, "CHATBOT_Q")) {
+      setLastQuestion(sessionId, "CHATBOT_Q");
+      return "Great — where will the chatbot be used (website, Facebook, Instagram, WhatsApp)?";
+    }
+    if (!lastQuestionIs(sessionId, "CHATBOT_GOAL_Q")) {
+      setLastQuestion(sessionId, "CHATBOT_GOAL_Q");
+      return "Should it do: FAQs, capture leads, or book appointments?";
+    }
+  }
+
+  // Generic qualification without repeating
+  if (!lastQuestionIs(sessionId, "BIZ_TYPE_Q")) {
+    setLastQuestion(sessionId, "BIZ_TYPE_Q");
+    return "What type of business is this (clinic, agency, shop, services)?";
+  }
+
+  if (!lastQuestionIs(sessionId, "GOAL_Q")) {
+    setLastQuestion(sessionId, "GOAL_Q");
+    return "What’s your #1 goal: more leads, more sales, or automate support?";
+  }
+
+  setLastQuestion(sessionId, "NEXT_STEP_Q");
+  return "Do you want pricing, a setup plan, or to book a quick call?";
 }
 
 /* =========================
    HEALTH
 ========================= */
 app.get("/health", (req, res) => res.json({ ok: true }));
+
 app.get("/api/config", (req, res) =>
   res.json({
     ok: true,
@@ -424,7 +513,12 @@ app.post("/api/login", adminCors, authLimiter, async (req, res) => {
 
     if (!email || !password) return res.status(400).json({ ok: false, error: "Email and password required" });
 
-    const { data: user, error } = await supabase.from("admin_users").select("id,email,password_hash,role").eq("email", email).maybeSingle();
+    const { data: user, error } = await supabase
+      .from("admin_users")
+      .select("id,email,password_hash,role")
+      .eq("email", email)
+      .maybeSingle();
+
     if (error) return res.status(500).json({ ok: false, error: "DB error" });
     if (!user) return res.status(401).json({ ok: false, error: "Invalid login" });
 
@@ -592,6 +686,9 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       }
     }
 
+    // Save to history first (helps AI avoid repeats)
+    pushHistory(sessionId, "user", message);
+
     // ✅ Save lead (never block reply)
     if (supabase) {
       try {
@@ -612,11 +709,13 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     let reply = "";
     let usedAI = false;
 
+    const history = getHistory(sessionId);
+
     if (openai) {
       try {
         const ai = await openai.responses.create({
           model: "gpt-4o-mini",
-          input: businessBrain(message),
+          input: businessBrain(message, history),
           temperature: 0.7,
         });
         reply = ai.output_text || "";
@@ -644,9 +743,10 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       reply += "\n\n📅 To book faster: send preferred date/time + timezone.";
     }
 
-    // ✅ Ask for email only when it makes sense (intent OR after 2+ messages)
+    // ✅ Ask for email only when it makes sense, and don't repeat
     if (!email && shouldAskEmail(sessionId, message, msgCount)) {
       markAskedEmail(sessionId);
+      setLastQuestion(sessionId, "ASK_EMAIL");
       reply += "\n\n✉️ If you want, leave your email and I’ll send pricing + next steps.";
     }
 
@@ -655,6 +755,9 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       markThanked(sessionId);
       reply += "\n\n✅ Thanks! What type of business is this for, and what’s your target launch date?";
     }
+
+    // Save bot reply to history
+    pushHistory(sessionId, "assistant", reply);
 
     res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
   } catch (e) {
