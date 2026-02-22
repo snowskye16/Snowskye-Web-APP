@@ -3,22 +3,21 @@
   if (window.__SNOWSKYE_WIDGET__) return;
   window.__SNOWSKYE_WIDGET__ = true;
 
-  // ✅ Ensure DOM is ready (fixes "widget doesn't show" when script is in <head>)
+  // ✅ DOM-ready guard (fixes widget not showing when embed is in <head>)
   function onReady(fn) {
     if (document.body) return fn();
     document.addEventListener("DOMContentLoaded", fn, { once: true });
   }
 
   onReady(() => {
-    // Safer script detection
+    // ✅ Safer script detection
     const script =
       document.currentScript ||
-      document.querySelector('script[src*="widget.js"]') ||
-      document.querySelector('script[data-brand][data-api-base]');
+      document.querySelector('script[src*="snowskye-web-app.onrender.com/widget.js"]') ||
+      document.querySelector('script[src*="widget.js"]');
 
     if (!script) {
-      // If this happens, embed tag is wrong or being rewritten
-      console.warn("[SnowSkyeWidget] script tag not found");
+      console.warn("[SnowSkyeWidget] Embed script tag not found.");
       return;
     }
 
@@ -35,9 +34,6 @@
     const FETCH_CREDENTIALS = CREDENTIALS === "include" ? "include" : "omit";
 
     // Determine API base:
-    // 1) data-api-base
-    // 2) script src origin
-    // 3) current page origin (dev)
     let API_BASE = (script.getAttribute("data-api-base") || "").trim().replace(/\/$/, "");
     if (!API_BASE) {
       try {
@@ -95,9 +91,6 @@
       } catch {}
     }
 
-    // =========================
-    // Helpers
-    // =========================
     function extractEmail(text) {
       const m = String(text || "").match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
       return m ? m[0].trim() : "";
@@ -107,8 +100,7 @@
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const res = await fetch(url, { ...options, signal: controller.signal });
-        return res;
+        return await fetch(url, { ...options, signal: controller.signal });
       } finally {
         clearTimeout(id);
       }
@@ -241,7 +233,6 @@
     toggle.className = "ssk-toggle";
     toggle.type = "button";
     toggle.innerHTML = "💬";
-    toggle.setAttribute("aria-label", `Open ${BRAND} chat`);
 
     const box = document.createElement("div");
     box.className = "ssk-box";
@@ -316,7 +307,7 @@
       const emailInMsg = extractEmail(text);
       if (isValidEmail(emailInMsg)) saveEmail(emailInMsg);
 
-      const email = getSavedEmail(); // may be ""
+      const email = getSavedEmail();
 
       try {
         const r = await fetchWithTimeout(
@@ -342,8 +333,7 @@
           return;
         }
 
-        const replyText = String(j.reply || "Thanks! How can I help?");
-        addMsg(replyText, "bot");
+        addMsg(String(j.reply || "Thanks! How can I help?"), "bot");
       } catch {
         addMsg(
           "I’m currently offline, but I can still help. Tell me your business type and what you want (leads, sales, booking, or automation).",
@@ -387,19 +377,14 @@
       }
     }
 
-    // =========================
     // Events
-    // =========================
     toggle.addEventListener("click", () => {
       box.classList.toggle("open");
       if (box.classList.contains("open") && !chatEl.dataset.welcome) {
         chatEl.dataset.welcome = "1";
         const saved = getSavedEmail();
-        if (saved) {
-          addMsg(`Welcome back! ✅ I saved your email (${saved}). What business are you running and what’s your goal?`, "bot");
-        } else {
-          addMsg(`Hi, I’m ${BRAND}. Tell me your business type + your goal, and I’ll help you grow fast.`, "bot");
-        }
+        if (saved) addMsg(`Welcome back! ✅ I saved your email (${saved}). What business are you running and what’s your goal?`, "bot");
+        else addMsg(`Hi, I’m ${BRAND}. Tell me your business type + your goal, and I’ll help you grow fast.`, "bot");
       }
     });
 
@@ -437,7 +422,6 @@
           else send("I want to book a consultation.");
           return;
         }
-
         if (a === "pricing") return send("Show me your pricing packages.");
         if (a === "website") return send("I want a premium website for my business.");
         if (a === "grow") return send("How can I grow my business using a chatbot?");
@@ -456,17 +440,11 @@
           }
 
           saveEmail(cleaned);
-          // This message will include email in JSON body automatically
           send("Please save my email for follow-up.");
-          return;
         }
       });
     });
 
-    // default
     openTab("chat");
-
-    // Optional debug:
-    // console.log("[SnowSkyeWidget] loaded", { API_BASE, CHAT_URL, sessionId });
   });
 })();
