@@ -75,16 +75,18 @@ app.set("trust proxy", 1);
 
 app.use(
   helmet({
-    contentSecurityPolicy: false, // keep simple for static site + widget
+    contentSecurityPolicy: false, // simple for static site + widget
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-/ ✅ 1) STATIC FIRST
-app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
+
 app.use(compression());
+
+// Body parsers before routes
 app.use(express.json({ limit: "300kb" }));
 app.use(express.urlencoded({ extended: true, limit: "300kb" }));
 
+// CORS (before session if you use cross-site cookies)
 app.use(
   cors({
     origin: FRONTEND_ORIGIN ? [FRONTEND_ORIGIN] : true,
@@ -144,17 +146,15 @@ app.use(
     proxy: true, // ✅ important on Render/proxies
     cookie: {
       httpOnly: true,
-      secure: IS_PROD,
+      secure: IS_PROD, // Render uses HTTPS in prod
       sameSite: IS_PROD ? (CROSS_SITE ? "none" : "lax") : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
-/* =========================
-   STATIC FILES (PUBLIC WEBSITE)
-========================= */
-app.use(express.static(PUBLIC_DIR));
+// ✅ STATIC WEBSITE (ONLY ONCE)
+app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
 /* =========================
    HELPERS
@@ -256,8 +256,6 @@ app.get("/api/config", (req, res) =>
 /* =========================
    AUTH (ADMIN)
 ========================= */
-
-// Create admin once (optional)
 app.post("/api/admin/register", authLimiter, async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
@@ -284,7 +282,6 @@ app.post("/api/admin/register", authLimiter, async (req, res) => {
   }
 });
 
-// Login (SESSION cookie)
 app.post("/api/login", authLimiter, async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
@@ -426,7 +423,6 @@ app.post("/chat", widgetLimiter, (req, res, next) => {
   next();
 });
 
-// ✅ one real handler
 app.post("/api/chat", chatLimiter, async (req, res) => {
   const started = Date.now();
 
@@ -435,7 +431,6 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     const source = cleanText(req.body?.source || "chat", 40);
     const sessionId = cleanText(req.body?.sessionId, 120) || "";
 
-    // Accept email from body OR try to extract from message text
     const emailFromBody = normalizeEmail(req.body?.email);
     const emailFromText = extractEmailFromText(message);
     const email = isValidEmail(emailFromBody) ? emailFromBody : isValidEmail(emailFromText) ? emailFromText : "";
@@ -497,18 +492,16 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
       reply += "\n\n📅 To book faster: send your name + email + preferred date/time + timezone.";
     }
 
-    // ✅ Lead capture (ask email if not known)
+    // ✅ Lead capture
     if (!email) {
       reply += "\n\n✉️ What’s the best email to follow up with you?";
     } else {
-      // If we got email, ask 1 key qualifier to convert
       reply += "\n\n✅ Thanks! What type of business is this for, and what’s your target launch date?";
     }
 
     res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
   } catch (e) {
     console.error("chat route fatal:", e);
-    // Always reply even on fatal error
     res.json({ ok: true, reply: FALLBACK.greet, ai: false });
   }
 });
@@ -551,26 +544,19 @@ app.post("/api/lead", leadLimiter, (req, res, next) => {
 /* =========================
    PAGES (WEBSITE)
 ========================= */
-
-// // ✅ Home
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-// ✅ Login
 app.get("/login", (req, res) => {
   if (req.session?.user) return res.redirect("/dashboard");
   res.sendFile(path.join(PUBLIC_DIR, "login.html"));
 });
 
-// ✅ Dashboard
 app.get("/dashboard", (req, res) => {
   if (!req.session?.user) return res.redirect("/login");
   res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
-
-// ❌ REMOVE /html route entirely
-// app.get("/html", ...) ❌
 
 // ✅ SPA fallback (LAST)
 app.get("*", (req, res) => {
