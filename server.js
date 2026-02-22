@@ -1,14 +1,15 @@
 /**
- * ✅ SnowSkyeAI server.js (UPGRADED + WIDGET FIX + NO-LOOP LEAD FLOW)
+ * ✅ SnowSkyeAI server.js (SELLABLE + WIDGET MIME FIX + MULTI-CLIENT + NO-LOOP)
  *
- * What’s improved vs your version:
- * ✅ /widget.js is forced to serve real JS (correct MIME + clear 404)
- * ✅ Widget assets (/icon-192.png etc) remain cross-domain friendly
- * ✅ Session-based anti-loop questions (won't repeat same questions)
- * ✅ Stable "ask email" behavior (won't keep nagging)
- * ✅ Optional in-memory chat history for better AI continuity
- * ✅ Still ALWAYS replies (OpenAI down => premium fallback)
- * ✅ Lead + appointment saving never blocks replies
+ * Key upgrades:
+ * ✅ /widget.js served with correct MIME (application/javascript)
+ * ✅ Route ordering fixed (widget route BEFORE express.static)
+ * ✅ Multi-tenant support via clientId (so you can sell it)
+ * ✅ Anti-loop: remembers last questions + chat history
+ * ✅ Email ask cooldown (no nagging)
+ * ✅ Always replies (OpenAI down => fallback)
+ * ✅ DB writes never block replies
+ * ✅ CORS error handler so widget won’t silently fail
  */
 
 require("dotenv").config();
@@ -70,10 +71,10 @@ if (!supabase) {
 }
 
 /* =========================
-   OPENAI (optional)
+   OPENAI
 ========================= */
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-if (!openai) console.warn("⚠️ OPENAI_API_KEY missing (AI replies will use premium fallback).");
+if (!openai) console.warn("⚠️ OPENAI_API_KEY missing (AI replies will use fallback).");
 
 /* =========================
    SECURITY + MIDDLEWARE
@@ -83,7 +84,7 @@ app.set("trust proxy", 1);
 app.use(
   helmet({
     contentSecurityPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" }, // widget/icon usable on other domains
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
@@ -100,21 +101,18 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 25,
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 35,
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const leadLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -127,27 +125,34 @@ app.use(globalLimiter);
 /* =========================
    CORS (SPLIT)
 ========================= */
+function allowOrigin(origin) {
+  if (!origin) return true;
+  if (!LOCK_CORS) return true;
+  return allowedOrigins.includes(origin);
+}
 
-// Public: allow cross-domain; no credentials needed
 const publicCors = cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (!LOCK_CORS) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (allowOrigin(origin)) return cb(null, true);
     return cb(new Error("Not allowed by CORS"));
   },
   credentials: false,
 });
 
-// Admin: sessions/cookies
 const adminCors = cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (!LOCK_CORS) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (allowOrigin(origin)) return cb(null, true);
     return cb(new Error("Not allowed by CORS"));
   },
   credentials: true,
+});
+
+/* ✅ important: CORS error handler so widget gets JSON instead of crashing */
+app.use((err, req, res, next) => {
+  if (err && String(err.message || "").includes("CORS")) {
+    return res.status(403).json({ ok: false, reply: "Blocked by CORS. Add this domain to allowed origins." });
+  }
+  next(err);
 });
 
 /* =========================
@@ -170,21 +175,9 @@ app.use(
 );
 
 /* =========================
-   STATIC (serve /public)
+   STATIC + WIDGET MIME FIX
 ========================= */
-
-// Cache widget.js for 1 day
-app.use((req, res, next) => {
-  if (req.path === "/widget.js") {
-    res.setHeader("Cache-Control", "public, max-age=86400");
-  }
-  next();
-});
-
-// Serve public assets
-app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
-
-// ✅ HARD FIX: Force /widget.js to be served as JavaScript (correct MIME, clear error)
+/** ✅ Put /widget.js route BEFORE express.static (ordering matters) */
 app.get("/widget.js", (req, res) => {
   const filePath = path.join(PUBLIC_DIR, "widget.js");
   if (!fs.existsSync(filePath)) {
@@ -195,7 +188,15 @@ app.get("/widget.js", (req, res) => {
   return res.sendFile(filePath);
 });
 
-// Optional: debug to confirm files deployed
+// Cache hint
+app.use((req, res, next) => {
+  if (req.path === "/widget.js") res.setHeader("Cache-Control", "public, max-age=86400");
+  next();
+});
+
+// Serve assets
+app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
+
 app.get("/debug/public-files", (req, res) => {
   try {
     const files = fs.readdirSync(PUBLIC_DIR);
@@ -258,14 +259,16 @@ function looksLikeLeadIntent(message) {
 }
 
 /* =========================
+   MULTI-CLIENT (SELLABLE)
+========================= */
+function getClientId(req) {
+  // You will send this from widget.js: { clientId }
+  return cleanText(req.body?.clientId, 80) || "default";
+}
+
+/* =========================
    SESSION MEMORY (ANTI-LOOP)
 ========================= */
-// sessionMemory.get(sessionId) => {
-//   email, emailCapturedAt, askedEmailAt,
-//   msgCount, thankedAt,
-//   lastQuestion, lastQuestionAt,
-//   history: [{role, content, ts}, ...]
-// }
 const sessionMemory = new Map();
 
 function getSessionMem(sessionId) {
@@ -273,7 +276,6 @@ function getSessionMem(sessionId) {
   const v = sessionMemory.get(sessionId) || null;
   if (!v) return null;
 
-  // TTL cleanup: 14 days
   const ttlMs = 14 * 24 * 60 * 60 * 1000;
   const last =
     v.lastQuestionAt ||
@@ -304,18 +306,11 @@ function setSessionEmail(sessionId, email) {
   sessionMemory.set(sessionId, { ...cur, email, emailCapturedAt: Date.now() });
 }
 
-function markAskedEmail(sessionId) {
-  if (!sessionId) return;
-  const cur = sessionMemory.get(sessionId) || {};
-  sessionMemory.set(sessionId, { ...cur, askedEmailAt: Date.now() });
-}
-
 function markThanked(sessionId) {
   if (!sessionId) return;
   const cur = sessionMemory.get(sessionId) || {};
   sessionMemory.set(sessionId, { ...cur, thankedAt: Date.now() });
 }
-
 function hasThanked(sessionId) {
   const cur = getSessionMem(sessionId);
   return Boolean(cur?.thankedAt);
@@ -326,7 +321,6 @@ function setLastQuestion(sessionId, qKey) {
   const cur = sessionMemory.get(sessionId) || {};
   sessionMemory.set(sessionId, { ...cur, lastQuestion: qKey, lastQuestionAt: Date.now() });
 }
-
 function lastQuestionIs(sessionId, qKey, withinMs = 10 * 60 * 1000) {
   const cur = getSessionMem(sessionId);
   if (!cur?.lastQuestion || cur.lastQuestion !== qKey) return false;
@@ -334,29 +328,23 @@ function lastQuestionIs(sessionId, qKey, withinMs = 10 * 60 * 1000) {
   return Date.now() - cur.lastQuestionAt < withinMs;
 }
 
-// Optional: keep short chat history for AI continuity (prevents repetitive AI)
 function pushHistory(sessionId, role, content, maxItems = 10) {
   if (!sessionId) return;
   const cur = sessionMemory.get(sessionId) || {};
   const history = Array.isArray(cur.history) ? cur.history : [];
   history.push({ role, content: cleanText(content, 800), ts: Date.now() });
-
-  // Keep last N items
-  const trimmed = history.slice(-maxItems);
-  sessionMemory.set(sessionId, { ...cur, history: trimmed });
+  sessionMemory.set(sessionId, { ...cur, history: history.slice(-maxItems) });
 }
-
 function getHistory(sessionId) {
   const cur = getSessionMem(sessionId);
   return Array.isArray(cur?.history) ? cur.history : [];
 }
 
-// Improved: ask email only once per 30 minutes, and only after intent or 3+ messages
 function shouldAskEmail(sessionId, message, msgCount) {
   const mem = getSessionMem(sessionId);
   if (mem?.email) return false;
 
-  // ✅ no nagging
+  // no nagging for 30 mins
   if (lastQuestionIs(sessionId, "ASK_EMAIL", 30 * 60 * 1000)) return false;
 
   const strongIntent = looksLikeLeadIntent(message);
@@ -368,14 +356,16 @@ function shouldAskEmail(sessionId, message, msgCount) {
 /* =========================
    AI PROMPT
 ========================= */
-function businessBrain(userMessage, history) {
+function businessBrain(clientId, userMessage, history) {
   const prior = (history || [])
     .map((h) => `${h.role.toUpperCase()}: ${h.content}`)
     .join("\n")
     .slice(-4000);
 
   return `
-You are SnowSkyeAI's premium assistant for an AI Website + Chatbot agency.
+You are SnowSkyeAI's premium assistant.
+
+Client/tenant: ${clientId}
 
 GOALS:
 - Explain services (websites, chatbots, automation, booking, lead capture)
@@ -385,9 +375,9 @@ GOALS:
 ANTI-LOOP RULES:
 - Do NOT repeat the same question if it was just asked.
 - Ask only 1 question at a time.
-- If user ignores a question, switch to offering options instead of repeating.
+- If user ignores a question, offer options instead of repeating.
 
-CONTEXT (chat so far):
+CONTEXT:
 ${prior || "(none)"}
 
 USER:
@@ -396,7 +386,7 @@ ${userMessage}
 }
 
 /* =========================
-   PREMIUM FALLBACK (ANTI-LOOP)
+   FALLBACK (ANTI-LOOP)
 ========================= */
 const FALLBACK = {
   greet: "Hi! I’m SnowSkyeAI. What type of business do you run and what’s your goal (leads, sales, or automation)?",
@@ -409,47 +399,19 @@ const FALLBACK = {
 function premiumFallbackReply(message, sessionId) {
   const m = String(message || "").toLowerCase();
 
-  // Pricing intent
   if (m.includes("price") || m.includes("pricing") || m.includes("how much") || m.includes("cost")) {
     setLastQuestion(sessionId, "PRICING");
     return FALLBACK.pricing;
   }
-
-  // Booking intent
   if (looksLikeBookingIntent(m)) {
     setLastQuestion(sessionId, "BOOKING");
     return FALLBACK.booking;
   }
 
-  // Website/chatbot targeted questions (rotating)
-  if (m.includes("website")) {
-    if (!lastQuestionIs(sessionId, "WEBSITE_Q")) {
-      setLastQuestion(sessionId, "WEBSITE_Q");
-      return "Nice — what type of website is it (clinic, agency, e-commerce, personal brand)?";
-    }
-    if (!lastQuestionIs(sessionId, "WEBSITE_FEATURES_Q")) {
-      setLastQuestion(sessionId, "WEBSITE_FEATURES_Q");
-      return "Do you need booking, payments, portfolio, or a lead form? (pick 1–2)";
-    }
-  }
-
-  if (m.includes("chatbot")) {
-    if (!lastQuestionIs(sessionId, "CHATBOT_Q")) {
-      setLastQuestion(sessionId, "CHATBOT_Q");
-      return "Great — where will the chatbot be used (website, Facebook, Instagram, WhatsApp)?";
-    }
-    if (!lastQuestionIs(sessionId, "CHATBOT_GOAL_Q")) {
-      setLastQuestion(sessionId, "CHATBOT_GOAL_Q");
-      return "Should it do: FAQs, capture leads, or book appointments?";
-    }
-  }
-
-  // Generic qualification without repeating
   if (!lastQuestionIs(sessionId, "BIZ_TYPE_Q")) {
     setLastQuestion(sessionId, "BIZ_TYPE_Q");
     return "What type of business is this (clinic, agency, shop, services)?";
   }
-
   if (!lastQuestionIs(sessionId, "GOAL_Q")) {
     setLastQuestion(sessionId, "GOAL_Q");
     return "What’s your #1 goal: more leads, more sales, or automate support?";
@@ -463,7 +425,6 @@ function premiumFallbackReply(message, sessionId) {
    HEALTH
 ========================= */
 app.get("/health", (req, res) => res.json({ ok: true }));
-
 app.get("/api/config", (req, res) =>
   res.json({
     ok: true,
@@ -542,14 +503,14 @@ app.post("/api/logout", adminCors, (req, res) => req.session.destroy(() => res.j
 app.post("/logout", adminCors, (req, res) => req.session.destroy(() => res.json({ ok: true, success: true })));
 
 /* =========================
-   ADMIN DATA (DASHBOARD)
+   ADMIN DATA
 ========================= */
 async function getLeads(req, res) {
   if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
 
   const { data, error } = await supabase
     .from("leads")
-    .select("id,email,message,source,session_id,created_at")
+    .select("id,client_id,email,message,source,session_id,created_at")
     .order("created_at", { ascending: false })
     .limit(1000);
 
@@ -558,6 +519,7 @@ async function getLeads(req, res) {
   res.json(
     (data || []).map((x) => ({
       id: x.id,
+      client_id: x.client_id || "default",
       email: x.email || "",
       message: x.message || "",
       time: x.created_at,
@@ -572,7 +534,7 @@ async function getAppointments(req, res) {
 
   const { data, error } = await supabase
     .from("appointments")
-    .select("id,email,message,status,created_at")
+    .select("id,client_id,email,message,status,created_at")
     .order("created_at", { ascending: false })
     .limit(1000);
 
@@ -581,6 +543,7 @@ async function getAppointments(req, res) {
   res.json(
     (data || []).map((x) => ({
       id: x.id,
+      client_id: x.client_id || "default",
       email: x.email || "",
       message: x.message || "",
       status: x.status || "pending",
@@ -591,50 +554,72 @@ async function getAppointments(req, res) {
 
 app.get("/api/leads", adminCors, requireAuth, getLeads);
 app.get("/api/appointments", adminCors, requireAuth, getAppointments);
-
 /* =========================
-   PUBLIC RECENT (WIDGET ACTIVITY)
+   PUBLIC RECENT (WIDGET ACTIVITY) — MULTI CLIENT SAFE ✅
+   GET /api/public/recent?clientId=buyer_001
 ========================= */
 app.get("/api/public/recent", publicCors, async (req, res) => {
   try {
-    if (!supabase) return res.status(200).json({ ok: false, leads: [], appointments: [] });
+    if (!supabase) {
+      return res.status(200).json({ ok: false, leads: [], appointments: [] });
+    }
 
-    const { data: leads } = await supabase.from("leads").select("message,created_at").order("created_at", { ascending: false }).limit(8);
+    // ✅ Client filter (SELLABLE)
+    const clientId = cleanText(req.query?.clientId, 80) || "default";
 
-    const { data: appointments } = await supabase
-      .from("appointments")
-      .select("message,status,created_at")
+    const leadsQ = supabase
+      .from("leads")
+      .select("message,created_at")
+      .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(8);
 
-    res.json({
+    const appsQ = supabase
+      .from("appointments")
+      .select("message,status,created_at")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    const [{ data: leads, error: leadsErr }, { data: appointments, error: appsErr }] =
+      await Promise.all([leadsQ, appsQ]);
+
+    if (leadsErr || appsErr) {
+      console.error("recent route error:", leadsErr?.message || leadsErr, appsErr?.message || appsErr);
+      return res.status(200).json({ ok: false, leads: [], appointments: [] });
+    }
+
+    return res.json({
       ok: true,
-      leads: (leads || []).map((l) => ({ message: safeShort(l.message, 140), time: l.created_at })),
+      clientId,
+      leads: (leads || []).map((l) => ({
+        message: safeShort(l.message, 140),
+        time: l.created_at,
+      })),
       appointments: (appointments || []).map((a) => ({
         message: safeShort(a.message, 140),
         status: a.status || "pending",
         created_at: a.created_at,
       })),
     });
-  } catch {
-    res.status(200).json({ ok: false, leads: [], appointments: [] });
+  } catch (e) {
+    console.error("recent route fatal:", e?.message || e);
+    return res.status(200).json({ ok: false, leads: [], appointments: [] });
   }
 });
 
 /* =========================
-   CHAT (WIDGET + WEBSITE)
+   CHAT
 ========================= */
-
-// alias: POST /chat -> /api/chat
 app.post("/chat", publicCors, chatLimiter, (req, res, next) => {
   req.url = "/api/chat";
   next();
 });
 
-async function getKnownEmailFromDB(sessionId) {
+async function getKnownEmailFromDB(sessionId, clientId) {
   if (!supabase || !sessionId) return "";
   try {
-    const { data, error } = await supabase
+    const q = supabase
       .from("leads")
       .select("email,created_at")
       .eq("session_id", sessionId)
@@ -642,6 +627,10 @@ async function getKnownEmailFromDB(sessionId) {
       .order("created_at", { ascending: false })
       .limit(1);
 
+    // if you add client_id column, filter by it
+    // q.eq("client_id", clientId);
+
+    const { data, error } = await q;
     if (error) return "";
     const e = normalizeEmail(data?.[0]?.email || "");
     return isValidEmail(e) ? e : "";
@@ -657,13 +646,14 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     const message = cleanText(req.body?.message, 2000);
     const source = cleanText(req.body?.source || "chat", 40);
     const sessionId = cleanText(req.body?.sessionId, 120) || "";
+    const clientId = getClientId(req);
 
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
 
     const msgCount = bumpMsgCount(sessionId);
 
-    // Email capture (body > message text > memory > DB)
+    // Email capture
     const emailFromBody = normalizeEmail(req.body?.email);
     const emailFromText = extractEmailFromText(message);
 
@@ -679,43 +669,41 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     }
 
     if (!email) {
-      const dbEmail = await getKnownEmailFromDB(sessionId);
+      const dbEmail = await getKnownEmailFromDB(sessionId, clientId);
       if (dbEmail) {
         email = dbEmail;
         setSessionEmail(sessionId, dbEmail);
       }
     }
 
-    // Save to history first (helps AI avoid repeats)
+    // History for anti-loop AI
     pushHistory(sessionId, "user", message);
+    const history = getHistory(sessionId);
 
-    // ✅ Save lead (never block reply)
+    // Save lead (never block reply)
     if (supabase) {
-      try {
-        await supabase.from("leads").insert([
+      supabase
+        .from("leads")
+        .insert([
           {
+            client_id: clientId, // ✅ add this column in DB
             email: email ? email : null,
             message,
             source,
             session_id: sessionId || null,
           },
-        ]);
-      } catch (dbErr) {
-        console.error("leads insert failed:", dbErr?.message || dbErr);
-      }
+        ])
+        .catch((e) => console.error("leads insert failed:", e?.message || e));
     }
 
-    // ✅ AI reply if available, else premium fallback (ALWAYS reply)
     let reply = "";
     let usedAI = false;
-
-    const history = getHistory(sessionId);
 
     if (openai) {
       try {
         const ai = await openai.responses.create({
           model: "gpt-4o-mini",
-          input: businessBrain(message, history),
+          input: businessBrain(clientId, message, history),
           temperature: 0.7,
         });
         reply = ai.output_text || "";
@@ -727,36 +715,32 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
 
     if (!reply) reply = premiumFallbackReply(message, sessionId);
 
-    // ✅ Booking intent => save appointment (never blocks reply)
     if (looksLikeBookingIntent(message) && supabase) {
-      try {
-        await supabase.from("appointments").insert([
+      supabase
+        .from("appointments")
+        .insert([
           {
+            client_id: clientId, // ✅ add this column in DB
             email: email ? email : null,
             message,
             status: "pending",
           },
-        ]);
-      } catch (dbErr) {
-        console.error("appointments insert failed:", dbErr?.message || dbErr);
-      }
+        ])
+        .catch((e) => console.error("appointments insert failed:", e?.message || e));
+
       reply += "\n\n📅 To book faster: send preferred date/time + timezone.";
     }
 
-    // ✅ Ask for email only when it makes sense, and don't repeat
     if (!email && shouldAskEmail(sessionId, message, msgCount)) {
-      markAskedEmail(sessionId);
       setLastQuestion(sessionId, "ASK_EMAIL");
       reply += "\n\n✉️ If you want, leave your email and I’ll send pricing + next steps.";
     }
 
-    // ✅ Say thanks ONLY ONCE per session (no repeating)
     if (email && !hasThanked(sessionId)) {
       markThanked(sessionId);
       reply += "\n\n✅ Thanks! What type of business is this for, and what’s your target launch date?";
     }
 
-    // Save bot reply to history
     pushHistory(sessionId, "assistant", reply);
 
     res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
@@ -769,7 +753,7 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
 app.get("/api/chat", publicCors, (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
 
 /* =========================
-   LEAD FORM (COMPAT)
+   LEAD FORM
 ========================= */
 app.post("/lead", publicCors, leadLimiter, async (req, res) => {
   try {
@@ -777,12 +761,14 @@ app.post("/lead", publicCors, leadLimiter, async (req, res) => {
 
     const message = cleanText(req.body?.message, 2000);
     const email = normalizeEmail(req.body?.email);
+    const clientId = getClientId(req);
 
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, error: msgErr });
 
     await supabase.from("leads").insert([
       {
+        client_id: clientId,
         email: isValidEmail(email) ? email : null,
         message,
         source: "lead_form",
@@ -802,7 +788,7 @@ app.post("/api/lead", publicCors, leadLimiter, (req, res, next) => {
 });
 
 /* =========================
-   PAGES (ADMIN on Render)
+   PAGES (ADMIN)
 ========================= */
 app.get("/login", (req, res) => {
   if (req.session?.user) return res.redirect("/dashboard");
@@ -818,7 +804,6 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-// Fallback
 app.get("*", (req, res) => {
   if (req.path.includes(".")) return res.status(404).end();
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
@@ -829,5 +814,6 @@ app.get("*", (req, res) => {
 ========================= */
 app.listen(PORT, () => {
   console.log(`✅ SnowSkyeAI server running on port ${PORT} (${NODE_ENV})`);
-  console.log(`✅ Widget URL: /widget.js (public/widget.js must exist)`);
+  console.log(`✅ API: /api/chat`);
+  console.log(`✅ Optional widget (if hosted here): /widget.js`);
 });

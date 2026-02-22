@@ -29,6 +29,9 @@
     const LOGO = script.getAttribute("data-logo") || "";
     const BOOKING = script.getAttribute("data-booking") || "";
 
+    // ✅ SELLABLE: per-customer tenant key
+    const CLIENT_ID = script.getAttribute("data-client") || "default";
+
     // Optional: cookies/session (default OFF for cross-domain simplicity)
     const CREDENTIALS = (script.getAttribute("data-credentials") || "omit").toLowerCase();
     const FETCH_CREDENTIALS = CREDENTIALS === "include" ? "include" : "omit";
@@ -73,10 +76,12 @@
     // Email persistence (client-side)
     // =========================
     const EMAIL_STORE_KEY = `snowskye_email_${sessionId}`;
+
     function isValidEmail(email) {
       const e = String(email || "").trim();
       return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
     }
+
     function getSavedEmail() {
       try {
         const e = (localStorage.getItem(EMAIL_STORE_KEY) || "").trim();
@@ -85,6 +90,7 @@
         return "";
       }
     }
+
     function saveEmail(email) {
       try {
         localStorage.setItem(EMAIL_STORE_KEY, email);
@@ -320,6 +326,7 @@
               message: text,
               sessionId,
               source: "widget",
+              clientId: CLIENT_ID, // ✅ SELLABLE
               ...(email ? { email } : {}),
             }),
           },
@@ -351,7 +358,9 @@
     async function loadActivity() {
       activityEl.innerHTML = `<div class="ssk-msg">Loading recent activity…</div>`;
       try {
-        const res = await fetchWithTimeout(RECENT_URL, { method: "GET", credentials: "omit" }, 12000);
+        // ✅ SELLABLE: filter by clientId
+        const url = `${RECENT_URL}?clientId=${encodeURIComponent(CLIENT_ID)}`;
+        const res = await fetchWithTimeout(url, { method: "GET", credentials: "omit" }, 12000);
         const data = await res.json().catch(() => ({}));
 
         const leads = Array.isArray(data?.leads) ? data.leads : [];
@@ -388,7 +397,8 @@
       }
     });
 
-    $(".ssk-close").addEventListener("click", () => box.classList.remove("open"));
+    const closeBtn = $(".ssk-close");
+    if (closeBtn) closeBtn.addEventListener("click", () => box.classList.remove("open"));
 
     box.querySelectorAll(".ssk-tab").forEach((b) => {
       b.addEventListener("click", async () => {
@@ -397,21 +407,26 @@
       });
     });
 
-    $(".ssk-send").addEventListener("click", () => {
-      const m = (input.value || "").trim();
-      if (!m) return;
-      input.value = "";
-      send(m);
-    });
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+    const sendBtn = $(".ssk-send");
+    if (sendBtn) {
+      sendBtn.addEventListener("click", () => {
         const m = (input.value || "").trim();
         if (!m) return;
         input.value = "";
         send(m);
-      }
-    });
+      });
+    }
+
+    if (input) {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const m = (input.value || "").trim();
+          if (!m) return;
+          input.value = "";
+          send(m);
+        }
+      });
+    }
 
     box.querySelectorAll(".ssk-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
@@ -428,9 +443,12 @@
 
         if (a === "save_email") {
           const current = getSavedEmail();
-          const email = prompt(
-            current ? `Email already saved: ${current}\n\nEnter a new email to update:` : "Enter your email (for follow-up):"
-          );
+          let email = "";
+          try {
+            email = prompt(
+              current ? `Email already saved: ${current}\n\nEnter a new email to update:` : "Enter your email (for follow-up):"
+            );
+          } catch {}
           if (!email) return;
 
           const cleaned = String(email).trim();
