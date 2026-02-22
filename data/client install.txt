@@ -1,0 +1,8 @@
+<script
+  src="https://snowskye-web-app.onrender.com/widget.js"
+  data-api-base="https://snowskye-web-app.onrender.com"
+  data-brand="SnowSkye AI"
+  data-color="#38bdf8"
+  data-logo="https://snowskye-web-app.onrender.com/icon-192.png"
+  data-booking="https://calendly.com/dental"
+></script>

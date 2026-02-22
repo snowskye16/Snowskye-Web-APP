@@ -1,12 +1,12 @@
 /**
- * ✅ SnowSkyeAI server.js (FULL FIX + PREMIUM UPGRADE)
- * - ✅ Public website works on your URL (serves /public/index.html)
- * - ✅ Widget + website chat both work (/api/chat + /chat alias)
- * - ✅ AI ALWAYS replies (OpenAI failure => smart fallback reply)
- * - ✅ Always saves leads (DB failure never blocks reply)
- * - ✅ Strong lead-capture flow (asks for email + business info)
- * - ✅ Protected dashboard (/dashboard) + login (/login)
- * - ✅ Render-ready sessions (proxy + secure cookies)
+ * ✅ SnowSkyeAI server.js (CLEAN UPGRADE)
+ *
+ * Goals:
+ * ✅ Widget works cross-domain without cookies (public routes)
+ * ✅ Admin dashboard uses sessions (same domain)
+ * ✅ ALWAYS replies (OpenAI down => fallback)
+ * ✅ Email capture stops repeating once captured (per sessionId)
+ * ✅ Saves leads + booking intent to Supabase (never blocks reply)
  */
 
 require("dotenv").config();
@@ -17,7 +17,6 @@ const session = require("express-session");
 const helmet = require("helmet");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
-
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 const path = require("path");
@@ -35,18 +34,22 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 const IS_PROD = NODE_ENV === "production";
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-/**
- * If you host frontend on another domain, set:
- * FRONTEND_ORIGIN="https://your-frontend.com"
- * If empty => same-origin/dev ok.
- */
+// CORS allowlist (recommended once your front-end domain is final)
 const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || "").trim();
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-/**
- * If cross-site cookies are required (frontend different domain):
- * CROSS_SITE="true"
- */
-const CROSS_SITE = String(process.env.CROSS_SITE || "false").toLowerCase() === "true";
+const LOCK_CORS = String(process.env.LOCK_CORS || "false").toLowerCase() === "true";
+
+function buildAllowedOrigins() {
+  const set = new Set();
+  if (FRONTEND_ORIGIN) set.add(FRONTEND_ORIGIN);
+  for (const o of FRONTEND_ORIGINS) set.add(o);
+  return Array.from(set);
+}
+const allowedOrigins = buildAllowedOrigins();
 
 /* =========================
    SUPABASE
@@ -54,19 +57,20 @@ const CROSS_SITE = String(process.env.CROSS_SITE || "false").toLowerCase() === "
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
-}
-
 const supabase =
   SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     : null;
 
+if (!supabase) {
+  console.warn("⚠️ Supabase not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing). DB saving disabled.");
+}
+
 /* =========================
    OPENAI (optional)
 ========================= */
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+if (!openai) console.warn("⚠️ OPENAI_API_KEY missing (AI replies will use fallback).");
 
 /* =========================
    SECURITY + MIDDLEWARE
@@ -75,27 +79,17 @@ app.set("trust proxy", 1);
 
 app.use(
   helmet({
-    contentSecurityPolicy: false, // simple for static site + widget
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // widget/icon usable on other domains
   })
 );
 
 app.use(compression());
-
-// Body parsers before routes
 app.use(express.json({ limit: "300kb" }));
 app.use(express.urlencoded({ extended: true, limit: "300kb" }));
 
-// CORS (before session if you use cross-site cookies)
-app.use(
-  cors({
-    origin: FRONTEND_ORIGIN ? [FRONTEND_ORIGIN] : true,
-    credentials: true,
-  })
-);
-
 /* =========================
-   RATE LIMITERS
+   RATE LIMIT
 ========================= */
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -103,29 +97,19 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 25,
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 30,
+  max: 35,
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 const leadLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const widgetLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
   standardHeaders: true,
@@ -135,7 +119,37 @@ const widgetLimiter = rateLimit({
 app.use(globalLimiter);
 
 /* =========================
-   SESSION (Render-ready)
+   CORS (SPLIT)
+   - Public widget/chat: no cookies needed
+   - Admin routes: allow cookies (same site on Render)
+========================= */
+
+// Public: allow cross-domain; no credentials needed
+const publicCors = cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/postman
+    if (!LOCK_CORS) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error("Not allowed by CORS"));
+  },
+  credentials: false,
+});
+
+// Admin: sessions/cookies (works best if admin pages served from SAME Render domain)
+const adminCors = cors({
+  origin: (origin, cb) => {
+    // If admin is served on same domain, origin is same and OK.
+    // If you ever host dashboard on another domain, you must LOCK and allowlist it.
+    if (!origin) return cb(null, true);
+    if (!LOCK_CORS) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+});
+
+/* =========================
+   SESSION (ADMIN ONLY)
 ========================= */
 app.use(
   session({
@@ -143,17 +157,26 @@ app.use(
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
-    proxy: true, // ✅ important on Render/proxies
+    proxy: true,
     cookie: {
       httpOnly: true,
-      secure: IS_PROD, // Render uses HTTPS in prod
-      sameSite: IS_PROD ? (CROSS_SITE ? "none" : "lax") : "lax",
+      secure: IS_PROD,
+      sameSite: "lax", // ✅ best when /login + /dashboard are on Render domain
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
-// ✅ STATIC WEBSITE (ONLY ONCE)
+/* =========================
+   STATIC
+========================= */
+app.use((req, res, next) => {
+  // cache widget.js for speed
+  if (req.path === "/widget.js") {
+    res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day
+  }
+  next();
+});
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
 /* =========================
@@ -176,25 +199,81 @@ function guardMessage(message) {
   if (m.length > 2000) return "Message too long.";
   return "";
 }
+function safeShort(text, max = 140) {
+  return cleanText(text, max).replace(/\s+/g, " ");
+}
 function requireAuth(req, res, next) {
   if (!req.session?.user) return res.status(401).json({ ok: false, error: "Unauthorized" });
   next();
 }
 function looksLikeBookingIntent(message) {
   const m = String(message || "").toLowerCase();
-  return m.includes("book") || m.includes("appointment") || m.includes("schedule") || m.includes("call") || m.includes("consult");
+  return (
+    m.includes("book") ||
+    m.includes("appointment") ||
+    m.includes("schedule") ||
+    m.includes("consult") ||
+    m.includes("call")
+  );
 }
 function extractEmailFromText(text) {
   const t = String(text || "");
   const match = t.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
   return match ? normalizeEmail(match[0]) : "";
 }
-function safeShort(text, max = 140) {
-  return cleanText(text, max).replace(/\s+/g, " ");
+
+/* =========================
+   EMAIL STOP-LOOP FIX (per sessionId)
+   - remembers per sessionId for a while
+   - once email is captured, widget stops asking
+========================= */
+const sessionMemory = new Map();
+// sessionMemory.get(sessionId) => { email, emailCapturedAt, askedEmailAt }
+
+function getSessionMem(sessionId) {
+  if (!sessionId) return null;
+  const v = sessionMemory.get(sessionId) || null;
+  if (!v) return null;
+
+  // TTL cleanup: 14 days
+  const ttlMs = 14 * 24 * 60 * 60 * 1000;
+  const last = v.emailCapturedAt || v.askedEmailAt || 0;
+  if (last && Date.now() - last > ttlMs) {
+    sessionMemory.delete(sessionId);
+    return null;
+  }
+  return v;
+}
+
+function setSessionEmail(sessionId, email) {
+  if (!sessionId || !email) return;
+  sessionMemory.set(sessionId, {
+    ...(sessionMemory.get(sessionId) || {}),
+    email,
+    emailCapturedAt: Date.now(),
+  });
+}
+
+function markAskedEmail(sessionId) {
+  if (!sessionId) return;
+  sessionMemory.set(sessionId, {
+    ...(sessionMemory.get(sessionId) || {}),
+    askedEmailAt: Date.now(),
+  });
+}
+
+function shouldAskEmail(sessionId) {
+  // Ask email only if we do NOT already have it,
+  // and we haven’t asked in the last ~5 minutes (prevents spam looping).
+  const mem = getSessionMem(sessionId);
+  if (mem?.email) return false;
+  const asked = mem?.askedEmailAt || 0;
+  const cooldownMs = 5 * 60 * 1000;
+  return !asked || Date.now() - asked > cooldownMs;
 }
 
 /* =========================
-   AI PROMPT (SnowSkyeAI)
+   AI PROMPT
 ========================= */
 function businessBrain(userMessage) {
   return `
@@ -209,8 +288,7 @@ RULES:
 - Professional, confident, concise
 - Ask 1–2 questions at a time
 - If user asks pricing: give packages/ranges then ask requirements
-- Always try to capture a lead email gently
-- Never claim an appointment is confirmed unless staff confirms
+- Never claim an appointment is confirmed unless a human confirms
 
 User message:
 ${userMessage}
@@ -218,16 +296,14 @@ ${userMessage}
 }
 
 /* =========================
-   FALLBACK (Always Reply)
+   FALLBACK (ALWAYS REPLY)
 ========================= */
 const FALLBACK = {
   greet: "Hi! I’m SnowSkyeAI. What type of business do you run and what’s your goal (leads, sales, or automation)?",
-  askGoal: "Got it. What’s your #1 goal right now — more leads, more sales, or automate support?",
-  askEmail: "What’s the best email to follow up with you? (So I can send the next steps.)",
   pricing:
     "Pricing is one-time (no monthly fees): Starter $100 (chatbot), Popular $300 (website + chatbot + lead automation), Premium $500 (full system). What business type is this for?",
-  booking: "To book: send your name, email, preferred date/time, and timezone. I’ll mark it as pending for follow-up.",
-  offline: "I can still help even if AI is busy. What’s your business type and what do you want to achieve?",
+  booking:
+    "To book: please share your name, email, preferred date/time, and timezone. I’ll mark it as pending for follow-up.",
 };
 
 function fallbackReply(message) {
@@ -236,27 +312,28 @@ function fallbackReply(message) {
   if (looksLikeBookingIntent(m)) return FALLBACK.booking;
   if (m.includes("website")) return "Nice — what kind of website do you need (clinic, agency, e-commerce, personal brand)?";
   if (m.includes("chatbot")) return "Great — where do you want the chatbot (website, Facebook, IG, WhatsApp)?";
-  return FALLBACK.askGoal;
+  return "Got it. What’s your #1 goal right now — more leads, more sales, or automate support?";
 }
 
 /* =========================
-   HEALTH + CONFIG
+   HEALTH
 ========================= */
 app.get("/health", (req, res) => res.json({ ok: true }));
-app.get("/api/health", (req, res) => res.json({ ok: true, env: NODE_ENV }));
 app.get("/api/config", (req, res) =>
   res.json({
     ok: true,
     env: NODE_ENV,
     aiEnabled: Boolean(openai),
     supabaseEnabled: Boolean(supabase),
+    lockCors: LOCK_CORS,
+    allowedOrigins: LOCK_CORS ? allowedOrigins : "ALL (LOCK_CORS=false)",
   })
 );
 
 /* =========================
    AUTH (ADMIN)
 ========================= */
-app.post("/api/admin/register", authLimiter, async (req, res) => {
+app.post("/api/admin/register", adminCors, authLimiter, async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
 
@@ -267,7 +344,11 @@ app.post("/api/admin/register", authLimiter, async (req, res) => {
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: "Invalid email" });
     if (password.length < 6) return res.status(400).json({ ok: false, error: "Password must be at least 6 characters" });
 
-    const { data: existing, error: e1 } = await supabase.from("admin_users").select("id").eq("email", email).maybeSingle();
+    const { data: existing, error: e1 } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
     if (e1) return res.status(500).json({ ok: false, error: "DB error" });
     if (existing) return res.status(409).json({ ok: false, error: "Admin already exists" });
 
@@ -282,7 +363,7 @@ app.post("/api/admin/register", authLimiter, async (req, res) => {
   }
 });
 
-app.post("/api/login", authLimiter, async (req, res) => {
+app.post("/api/login", adminCors, authLimiter, async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
 
@@ -311,19 +392,13 @@ app.post("/api/login", authLimiter, async (req, res) => {
   }
 });
 
-// Compatibility alias
-app.post("/admin/login", authLimiter, (req, res, next) => {
-  req.url = "/api/login";
-  next();
-});
-
-app.post("/api/logout", (req, res) => req.session.destroy(() => res.json({ ok: true, success: true })));
-app.post("/logout", (req, res) => req.session.destroy(() => res.json({ ok: true, success: true })));
-
-app.get("/api/me", (req, res) => {
+app.get("/api/me", adminCors, (req, res) => {
   if (!req.session?.user) return res.status(401).json({ loggedIn: false });
   res.json({ loggedIn: true, user: req.session.user });
 });
+
+app.post("/api/logout", adminCors, (req, res) => req.session.destroy(() => res.json({ ok: true, success: true })));
+app.post("/logout", adminCors, (req, res) => req.session.destroy(() => res.json({ ok: true, success: true })));
 
 /* =========================
    ADMIN DATA (DASHBOARD)
@@ -345,7 +420,6 @@ async function getLeads(req, res) {
       email: x.email || "",
       message: x.message || "",
       time: x.created_at,
-      created_at: x.created_at,
       source: x.source || "chat",
       session_id: x.session_id || "",
     }))
@@ -369,21 +443,18 @@ async function getAppointments(req, res) {
       email: x.email || "",
       message: x.message || "",
       status: x.status || "pending",
-      created: x.created_at,
       created_at: x.created_at,
     }))
   );
 }
 
-app.get("/api/admin/leads", requireAuth, getLeads);
-app.get("/api/admin/appointments", requireAuth, getAppointments);
-app.get("/api/leads", requireAuth, getLeads);
-app.get("/api/appointments", requireAuth, getAppointments);
+app.get("/api/leads", adminCors, requireAuth, getLeads);
+app.get("/api/appointments", adminCors, requireAuth, getAppointments);
 
 /* =========================
-   PUBLIC RECENT (Widget Activity)
+   PUBLIC RECENT (WIDGET ACTIVITY)
 ========================= */
-app.get("/api/public/recent", async (req, res) => {
+app.get("/api/public/recent", publicCors, async (req, res) => {
   try {
     if (!supabase) return res.status(200).json({ ok: false, leads: [], appointments: [] });
 
@@ -414,16 +485,37 @@ app.get("/api/public/recent", async (req, res) => {
 });
 
 /* =========================
-   CHAT (Website + Widget)
+   CHAT (WIDGET + WEBSITE)
+   ✅ ALWAYS REPLY
+   ✅ Email stops looping after captured
 ========================= */
 
-// ✅ widget alias: POST /chat -> /api/chat
-app.post("/chat", widgetLimiter, (req, res, next) => {
+// alias: POST /chat -> /api/chat
+app.post("/chat", publicCors, chatLimiter, (req, res, next) => {
   req.url = "/api/chat";
   next();
 });
 
-app.post("/api/chat", chatLimiter, async (req, res) => {
+async function getKnownEmailFromDB(sessionId) {
+  if (!supabase || !sessionId) return "";
+  try {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("email,created_at")
+      .eq("session_id", sessionId)
+      .not("email", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) return "";
+    const e = normalizeEmail(data?.[0]?.email || "");
+    return isValidEmail(e) ? e : "";
+  } catch {
+    return "";
+  }
+}
+
+app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
   const started = Date.now();
 
   try {
@@ -431,12 +523,34 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
     const source = cleanText(req.body?.source || "chat", 40);
     const sessionId = cleanText(req.body?.sessionId, 120) || "";
 
-    const emailFromBody = normalizeEmail(req.body?.email);
-    const emailFromText = extractEmailFromText(message);
-    const email = isValidEmail(emailFromBody) ? emailFromBody : isValidEmail(emailFromText) ? emailFromText : "";
-
     const msgErr = guardMessage(message);
     if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
+
+    // Email capture logic (body > message text > memory > DB)
+    const emailFromBody = normalizeEmail(req.body?.email);
+    const emailFromText = extractEmailFromText(message);
+
+    let email = "";
+    if (isValidEmail(emailFromBody)) email = emailFromBody;
+    else if (isValidEmail(emailFromText)) email = emailFromText;
+
+    // If we got email now -> store in memory so we stop asking
+    if (email) setSessionEmail(sessionId, email);
+
+    // If no email, check memory first
+    if (!email) {
+      const mem = getSessionMem(sessionId);
+      if (mem?.email && isValidEmail(mem.email)) email = mem.email;
+    }
+
+    // If still no email, optionally check DB (so email persists across reloads)
+    if (!email) {
+      const dbEmail = await getKnownEmailFromDB(sessionId);
+      if (dbEmail) {
+        email = dbEmail;
+        setSessionEmail(sessionId, dbEmail);
+      }
+    }
 
     // ✅ Save lead (never block reply)
     if (supabase) {
@@ -454,7 +568,7 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
       }
     }
 
-    // ✅ AI reply, fallback always
+    // ✅ AI reply if available, else fallback (ALWAYS respond)
     let reply = "";
     let usedAI = false;
 
@@ -468,14 +582,14 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
         reply = ai.output_text || "";
         usedAI = Boolean(reply);
       } catch (aiErr) {
+        // OpenAI down => fallback
         console.error("openai error:", aiErr?.message || aiErr);
       }
     }
 
     if (!reply) reply = fallbackReply(message);
-    if (!reply) reply = FALLBACK.offline;
 
-    // ✅ Booking intent => save appointment
+    // ✅ Booking intent => save appointment (never blocks reply)
     if (looksLikeBookingIntent(message) && supabase) {
       try {
         await supabase.from("appointments").insert([
@@ -489,30 +603,35 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
         console.error("appointments insert failed:", dbErr?.message || dbErr);
       }
 
-      reply += "\n\n📅 To book faster: send your name + email + preferred date/time + timezone.";
+      // add booking helper only once (no spam)
+      reply += "\n\n📅 To book faster: send preferred date/time + timezone.";
     }
 
-    // ✅ Lead capture
-    if (!email) {
+    // ✅ Email prompt (ONLY if we truly don’t have email AND cooldown allows)
+    if (!email && shouldAskEmail(sessionId)) {
+      markAskedEmail(sessionId);
       reply += "\n\n✉️ What’s the best email to follow up with you?";
-    } else {
+    }
+
+    // ✅ If we have email, ask business questions instead (no email looping)
+    if (email) {
       reply += "\n\n✅ Thanks! What type of business is this for, and what’s your target launch date?";
     }
 
     res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
   } catch (e) {
     console.error("chat route fatal:", e);
+    // Always respond
     res.json({ ok: true, reply: FALLBACK.greet, ai: false });
   }
 });
 
-app.get("/chat", (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
-app.get("/api/chat", (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
+app.get("/api/chat", publicCors, (req, res) => res.status(200).json({ ok: true, note: "Use POST /api/chat" }));
 
 /* =========================
-   LEAD FORM COMPATIBILITY
+   LEAD FORM (COMPAT)
 ========================= */
-app.post("/lead", leadLimiter, async (req, res) => {
+app.post("/lead", publicCors, leadLimiter, async (req, res) => {
   try {
     if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
 
@@ -531,23 +650,20 @@ app.post("/lead", leadLimiter, async (req, res) => {
     ]);
 
     res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error("lead error:", e);
     res.status(500).json({ ok: false });
   }
 });
 
-app.post("/api/lead", leadLimiter, (req, res, next) => {
+app.post("/api/lead", publicCors, leadLimiter, (req, res, next) => {
   req.url = "/lead";
   next();
 });
 
 /* =========================
-   PAGES (WEBSITE)
+   PAGES (ADMIN on Render)
 ========================= */
-app.get("/", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-});
-
 app.get("/login", (req, res) => {
   if (req.session?.user) return res.redirect("/dashboard");
   res.sendFile(path.join(PUBLIC_DIR, "login.html"));
@@ -558,7 +674,12 @@ app.get("/dashboard", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
 });
 
-// ✅ SPA fallback (LAST)
+// Optional: if hosting homepage on backend too
+app.get("/", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
+// Fallback
 app.get("*", (req, res) => {
   if (req.path.includes(".")) return res.status(404).end();
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
@@ -569,4 +690,5 @@ app.get("*", (req, res) => {
 ========================= */
 app.listen(PORT, () => {
   console.log(`✅ SnowSkyeAI server running on port ${PORT} (${NODE_ENV})`);
+  console.log(`✅ Widget URL: /widget.js (public/widget.js must exist)`);
 });

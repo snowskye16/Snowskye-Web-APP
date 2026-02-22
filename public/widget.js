@@ -5,28 +5,107 @@
 
   const script = document.currentScript;
 
-  // SAME DOMAIN default:
-  const API_BASE = (script.getAttribute("data-api-base") || "").replace(/\/$/, "");
+  // =========================
+  // CONFIG (Cross-domain safe)
+  // =========================
   const BRAND = script.getAttribute("data-brand") || "SnowSkye AI";
   const COLOR = script.getAttribute("data-color") || "#38bdf8";
   const LOGO = script.getAttribute("data-logo") || "";
   const BOOKING = script.getAttribute("data-booking") || "";
 
-  // Use same domain if API_BASE empty
-  const CHAT_URL = (API_BASE ? API_BASE : "") + "/api/chat";
-  const RECENT_URL = (API_BASE ? API_BASE : "") + "/api/public/recent";
+  // Optional: cookies/session (default OFF for cross-domain simplicity)
+  const CREDENTIALS = (script.getAttribute("data-credentials") || "omit").toLowerCase();
+  const FETCH_CREDENTIALS = CREDENTIALS === "include" ? "include" : "omit";
 
-  // Session id (for lead tracking)
+  // Determine API base:
+  // 1) data-api-base
+  // 2) script src origin
+  // 3) current page origin (dev)
+  let API_BASE = (script.getAttribute("data-api-base") || "").trim().replace(/\/$/, "");
+  if (!API_BASE) {
+    try {
+      const src = script.getAttribute("src") || "";
+      if (src.startsWith("http")) API_BASE = new URL(src).origin;
+    } catch {}
+  }
+  if (!API_BASE) API_BASE = window.location.origin;
+
+  const CHAT_URL = `${API_BASE}/api/chat`;
+  const RECENT_URL = `${API_BASE}/api/public/recent`;
+
+  // =========================
+  // Session id (lead tracking)
+  // =========================
   let sessionId = "";
   try {
     sessionId = localStorage.getItem("snowskye_session") || "";
     if (!sessionId) {
-      sessionId = (crypto?.randomUUID?.() || String(Date.now()));
+      const uuid =
+        (typeof crypto !== "undefined" && crypto.randomUUID && crypto.randomUUID()) ||
+        `ssk_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      sessionId = uuid;
       localStorage.setItem("snowskye_session", sessionId);
     }
-  } catch {}
+  } catch {
+    sessionId = `ssk_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  }
 
+  // =========================
+  // Email persistence (client-side)
+  // - This helps stop "ask email" loops even if server restarts
+  // =========================
+  const EMAIL_STORE_KEY = `snowskye_email_${sessionId}`;
+  function getSavedEmail() {
+    try {
+      const e = (localStorage.getItem(EMAIL_STORE_KEY) || "").trim();
+      return isValidEmail(e) ? e : "";
+    } catch {
+      return "";
+    }
+  }
+  function saveEmail(email) {
+    try {
+      localStorage.setItem(EMAIL_STORE_KEY, email);
+    } catch {}
+  }
+
+  // =========================
+  // Helpers
+  // =========================
+  function isValidEmail(email) {
+    const e = String(email || "").trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+  }
+
+  function extractEmail(text) {
+    const m = String(text || "").match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+    return m ? m[0].trim() : "";
+  }
+
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (m) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    }[m]));
+  }
+
+  // =========================
   // Styles
+  // =========================
   const style = document.createElement("style");
   style.textContent = `
   :root{ --sk:${COLOR}; }
@@ -107,6 +186,8 @@
     border-radius:16px; border:1px solid rgba(255,255,255,.10);
     background: rgba(255,255,255,.06);
     line-height:1.35; font-size:14px;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .ssk-msg.me{margin-left:auto; background: rgba(56,189,248,.22); border-color: rgba(56,189,248,.30);}
   .ssk-meta{display:flex; justify-content:space-between; gap:12px; font-size:11px; margin-top:8px; color: rgba(255,255,255,.55);}
@@ -133,7 +214,9 @@
   `;
   document.head.appendChild(style);
 
+  // =========================
   // UI
+  // =========================
   const toggle = document.createElement("button");
   toggle.className = "ssk-toggle";
   toggle.innerHTML = "💬";
@@ -202,29 +285,60 @@
     chatEl.scrollTop = chatEl.scrollHeight;
   }
 
+  // ✅ This is the key upgrade:
+  // - If we have a saved email, send it in JSON body
+  // - Also detect email inside the message and store it
   async function send(message) {
-  addMsg(message, "me");
+    const text = String(message || "").trim();
+    if (!text) return;
 
-  try {
-    const r = await fetch(CHAT_URL, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, sessionId, source: "widget" }),
-    });
+    addMsg(text, "me");
 
-    const j = await r.json().catch(() => ({}));
+    // Detect email inside user's message
+    const emailInMsg = extractEmail(text);
+    if (isValidEmail(emailInMsg)) saveEmail(emailInMsg);
 
-    if (!r.ok) {
-      addMsg(j?.reply || j?.error || `Request failed (${r.status})`, "bot");
-      return;
+    const email = getSavedEmail(); // may be ""
+
+    try {
+      const r = await fetchWithTimeout(
+        CHAT_URL,
+        {
+          method: "POST",
+          credentials: FETCH_CREDENTIALS,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            sessionId,
+            source: "widget",
+            // ✅ send real email field if known
+            ...(email ? { email } : {}),
+          }),
+        },
+        15000
+      );
+
+      const j = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        addMsg(j?.reply || j?.error || `Request failed (${r.status})`, "bot");
+        return;
+      }
+
+      // If server replies with something that includes an email, we store it too (optional)
+      const replyText = String(j.reply || "Thanks! How can I help?");
+      const emailInReply = extractEmail(replyText);
+      if (isValidEmail(emailInReply)) saveEmail(emailInReply);
+
+      addMsg(replyText, "bot");
+    } catch {
+      // ✅ If server is down, still respond in UI (client fallback)
+      addMsg(
+        "I’m currently offline, but I can still help. Tell me your business type and what you want (leads, sales, booking, or automation).",
+        "bot"
+      );
     }
-
-    addMsg(j.reply || "Thanks! How can I help?", "bot");
-  } catch (e) {
-    addMsg("Server unavailable. Please try again later.", "bot");
   }
-}
 
   function openTab(name) {
     box.querySelectorAll(".ssk-tab").forEach((b) =>
@@ -237,7 +351,11 @@
   async function loadActivity() {
     activityEl.innerHTML = `<div class="ssk-msg">Loading recent activity…</div>`;
     try {
-      const res = await fetch(RECENT_URL, { method: "GET" });
+      const res = await fetchWithTimeout(
+        RECENT_URL,
+        { method: "GET", credentials: "omit" },
+        12000
+      );
       const data = await res.json().catch(() => ({}));
 
       const leads = Array.isArray(data?.leads) ? data.leads : [];
@@ -245,8 +363,26 @@
 
       const block = document.createElement("div");
       block.innerHTML = `
-        <div class="ssk-msg"><b>Recent Leads</b><div style="margin-top:8px;opacity:.85;font-size:13px">${leads.map(l=>`• ${escapeHtml(l.message)} <span style="opacity:.6">(${escapeHtml(l.time||"")})</span>`).join("<br>") || "No leads yet."}</div></div>
-        <div class="ssk-msg"><b>Recent Appointments</b><div style="margin-top:8px;opacity:.85;font-size:13px">${apps.map(a=>`• ${escapeHtml(a.message)} <span style="opacity:.6">(${escapeHtml(a.status||"pending")})</span>`).join("<br>") || "No appointments yet."}</div></div>
+        <div class="ssk-msg"><b>Recent Leads</b><div style="margin-top:8px;opacity:.85;font-size:13px">${
+          leads
+            .map(
+              (l) =>
+                `• ${escapeHtml(l.message)} <span style="opacity:.6">(${escapeHtml(
+                  l.time || ""
+                )})</span>`
+            )
+            .join("<br>") || "No leads yet."
+        }</div></div>
+        <div class="ssk-msg"><b>Recent Appointments</b><div style="margin-top:8px;opacity:.85;font-size:13px">${
+          apps
+            .map(
+              (a) =>
+                `• ${escapeHtml(a.message)} <span style="opacity:.6">(${escapeHtml(
+                  a.status || "pending"
+                )})</span>`
+            )
+            .join("<br>") || "No appointments yet."
+        }</div></div>
       `;
       activityEl.innerHTML = "";
       activityEl.appendChild(block);
@@ -255,18 +391,21 @@
     }
   }
 
-  function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, (m) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
-
-  // events
+  // =========================
+  // Events
+  // =========================
   toggle.addEventListener("click", () => {
     box.classList.toggle("open");
     if (box.classList.contains("open") && !chatEl.dataset.welcome) {
       chatEl.dataset.welcome = "1";
-      addMsg(`Hi, I’m ${BRAND}. Tell me your business type + your goal, and I’ll help you grow fast.`, "bot");
+
+      // ✅ If we already have email, greet differently (no email capture spam)
+      const saved = getSavedEmail();
+      if (saved) {
+        addMsg(`Welcome back! ✅ I saved your email (${saved}). What business are you running and what’s your goal?`, "bot");
+      } else {
+        addMsg(`Hi, I’m ${BRAND}. Tell me your business type + your goal, and I’ll help you grow fast.`, "bot");
+      }
     }
   });
 
@@ -298,18 +437,35 @@
   box.querySelectorAll(".ssk-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       const a = chip.dataset.action;
+
       if (a === "book") {
         if (BOOKING) window.open(BOOKING, "_blank", "noopener");
         else send("I want to book a consultation.");
         return;
       }
+
       if (a === "pricing") return send("Show me your pricing packages.");
       if (a === "website") return send("I want a premium website for my business.");
       if (a === "grow") return send("How can I grow my business using a chatbot?");
+
       if (a === "save_email") {
-        const email = prompt("Enter your email (for follow-up):");
+        const current = getSavedEmail();
+        const email = prompt(
+          current ? `Email already saved: ${current}\n\nEnter a new email to update:` : "Enter your email (for follow-up):"
+        );
         if (!email) return;
-        send(`My email is ${email}. Please save it and follow up with me.`);
+
+        const cleaned = String(email).trim();
+        if (!isValidEmail(cleaned)) {
+          addMsg("That email looks invalid. Please enter a valid email like name@gmail.com", "bot");
+          return;
+        }
+
+        // ✅ Save locally and send as REAL email field
+        saveEmail(cleaned);
+
+        // send a normal message, but we also include email in JSON body inside send()
+        send("Please save my email for follow-up.");
         return;
       }
     });
