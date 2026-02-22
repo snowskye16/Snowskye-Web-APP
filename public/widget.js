@@ -203,19 +203,28 @@
   }
 
   async function send(message) {
-    addMsg(message, "me");
-    try {
-      const r = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, sessionId, source: "widget" }),
-      });
-      const j = await r.json().catch(() => ({}));
-      addMsg(j.reply || "Thanks! How can I help?", "bot");
-    } catch {
-      addMsg("Server unavailable. Please try again later.", "bot");
+  addMsg(message, "me");
+
+  try {
+    const r = await fetch(CHAT_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, sessionId, source: "widget" }),
+    });
+
+    const j = await r.json().catch(() => ({}));
+
+    if (!r.ok) {
+      addMsg(j?.reply || j?.error || `Request failed (${r.status})`, "bot");
+      return;
     }
+
+    addMsg(j.reply || "Thanks! How can I help?", "bot");
+  } catch (e) {
+    addMsg("Server unavailable. Please try again later.", "bot");
   }
+}
 
   function openTab(name) {
     box.querySelectorAll(".ssk-tab").forEach((b) =>
