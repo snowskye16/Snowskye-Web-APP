@@ -1,20 +1,21 @@
 /**
- * ✅ SnowSkyeAI Widget (UPGRADED FULL)
- * Based on your code + fixes:
- * ✅ data-client-id (consistent attribute)
- * ✅ Logo always works (relative -> absolute using API_BASE)
+ * ✅ Skyesnow AI Widget (UPGRADED FULL + NO LOOP)
+ *
+ * Fixes & Upgrades:
+ * ✅ Stores & reuses sessionId from SERVER response (bulletproof)
+ * ✅ Prevents double-send (isSending lock + Enter preventDefault)
+ * ✅ Doesn't force DONE from email unless appropriate (server also fixed)
+ * ✅ "Save my email" syncs server silently (no extra chat spam)
+ * ✅ Multi-tenant clientId (data-client-id)
  * ✅ Activity uses clientId filter
- * ✅ Sends clientId to backend (multi-tenant)
- * ✅ Better lead capture flow (Name -> Want -> Email -> Thank you)
- * ✅ Stores name/want/email in localStorage (per client + session)
- * ✅ Robust error handling + safe DOM-ready
- * ✅ Optional "Save my email" still works
+ * ✅ Logo works cross-domain (absolute)
+ * ✅ Lead flow: name -> want -> email -> done (local + server)
  */
 
 (() => {
   // Prevent double load
-  if (window.__SNOWSKYE_WIDGET__) return;
-  window.__SNOWSKYE_WIDGET__ = true;
+  if (window.__SKYESNOW_WIDGET__) return;
+  window.__SKYESNOW_WIDGET__ = true;
 
   function onReady(fn) {
     if (document.body) return fn();
@@ -22,33 +23,30 @@
   }
 
   onReady(() => {
-    // ✅ Safer script detection (works on any domain)
     const script =
       document.currentScript ||
       document.querySelector('script[src*="/widget.js"]') ||
       document.querySelector('script[src*="widget.js"]');
 
     if (!script) {
-      console.warn("[SnowSkyeWidget] Embed script tag not found.");
+      console.warn("[SkyesnowWidget] Embed script tag not found.");
       return;
     }
 
     // =========================
     // CONFIG
     // =========================
-    const BRAND = script.getAttribute("data-brand") || "SnowSkye AI";
+    const BRAND = script.getAttribute("data-brand") || "Skyesnow AI";
     const COLOR = script.getAttribute("data-color") || "#38bdf8";
     const LOGO = (script.getAttribute("data-logo") || "").trim();
     const BOOKING = (script.getAttribute("data-booking") || "").trim();
 
-    // ✅ SELLABLE: per-customer tenant key (fixed attribute name)
     const CLIENT_ID = (script.getAttribute("data-client-id") || "default").trim();
 
-    // Optional: cookies/session (default OFF for cross-domain simplicity)
     const CREDENTIALS = (script.getAttribute("data-credentials") || "omit").toLowerCase();
     const FETCH_CREDENTIALS = CREDENTIALS === "include" ? "include" : "omit";
 
-    // Determine API base:
+    // API base
     let API_BASE = (script.getAttribute("data-api-base") || "").trim().replace(/\/$/, "");
     if (!API_BASE) {
       try {
@@ -61,7 +59,6 @@
     const CHAT_URL = `${API_BASE}/api/chat`;
     const RECENT_URL = `${API_BASE}/api/public/recent?clientId=${encodeURIComponent(CLIENT_ID)}`;
 
-    // ✅ Make URLs absolute (fixes logo not loading on buyer domain)
     function toAbsoluteUrl(url) {
       const u = String(url || "").trim();
       if (!u) return "";
@@ -75,7 +72,7 @@
     const LOGO_URL = toAbsoluteUrl(LOGO);
 
     // =========================
-    // Session id (lead tracking)
+    // Session id (lead tracking) ✅ SERVER-SYNCED
     // =========================
     function safeUUID() {
       try {
@@ -86,21 +83,37 @@
       return `ssk_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     }
 
+    const SESSION_KEY = `skyesnow_session_${CLIENT_ID}`; // per client
     let sessionId = "";
-    try {
-      sessionId = localStorage.getItem("snowskye_session") || "";
+
+    function loadSessionId() {
+      try {
+        sessionId = (localStorage.getItem(SESSION_KEY) || "").trim();
+      } catch {
+        sessionId = "";
+      }
       if (!sessionId) {
         sessionId = safeUUID();
-        localStorage.setItem("snowskye_session", sessionId);
+        try {
+          localStorage.setItem(SESSION_KEY, sessionId);
+        } catch {}
       }
-    } catch {
-      sessionId = safeUUID();
     }
+    function saveSessionId(newId) {
+      const id = String(newId || "").trim();
+      if (!id) return;
+      sessionId = id;
+      try {
+        localStorage.setItem(SESSION_KEY, id);
+      } catch {}
+    }
+
+    loadSessionId();
 
     // =========================
     // Lead persistence (client + session scoped)
     // =========================
-    const BASE_KEY = `snowskye_${CLIENT_ID}_${sessionId}`;
+    const BASE_KEY = `skyesnow_${CLIENT_ID}_${sessionId}`;
     const EMAIL_KEY = `${BASE_KEY}_email`;
     const NAME_KEY = `${BASE_KEY}_name`;
     const WANT_KEY = `${BASE_KEY}_want`;
@@ -110,7 +123,6 @@
       const e = String(email || "").trim();
       return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
     }
-
     function extractEmail(text) {
       const m = String(text || "").match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
       return m ? m[0].trim() : "";
@@ -136,7 +148,6 @@
     function saveEmail(email) {
       if (isValidEmail(email)) setLS(EMAIL_KEY, email.trim());
     }
-
     function getSavedName() {
       return getLS(NAME_KEY);
     }
@@ -144,7 +155,6 @@
       const n = String(name || "").trim();
       if (n) setLS(NAME_KEY, n.slice(0, 60));
     }
-
     function getSavedWant() {
       return getLS(WANT_KEY);
     }
@@ -152,7 +162,6 @@
       const w = String(want || "").trim();
       if (w) setLS(WANT_KEY, w.slice(0, 160));
     }
-
     function getStage() {
       const s = getLS(STAGE_KEY);
       return s || "name";
@@ -161,7 +170,6 @@
       setLS(STAGE_KEY, stage);
     }
 
-    // If user already has email => mark done
     if (getSavedEmail()) setStage("done");
 
     async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
@@ -307,7 +315,7 @@
     box.innerHTML = `
       <div class="ssk-head">
         <div class="ssk-brand">
-          <div class="ssk-logo">${LOGO_URL ? `<img src="${LOGO_URL}" alt="${BRAND}"/>` : ""}</div>
+          <div class="ssk-logo">${LOGO_URL ? `<img src="${LOGO_URL}" alt="${escapeHtml(BRAND)}"/>` : ""}</div>
           <div class="ssk-title">
             <b>${escapeHtml(BRAND)}</b>
             <div class="ssk-live"><span class="ssk-dot"></span><span>Live</span></div>
@@ -346,6 +354,8 @@
     const chatEl = $(".ssk-chat");
     const activityEl = $(".ssk-activity");
     const input = $(".ssk-input");
+    const sendBtn = $(".ssk-send");
+    const closeBtn = $(".ssk-close");
 
     function nowTime() {
       const d = new Date();
@@ -367,44 +377,35 @@
     }
 
     // =========================
-    // Lead capture flow (Name -> Want -> Email -> Thank you)
+    // Lead flow helpers
     // =========================
     function normalizeName(text) {
       const t = String(text || "").trim();
       if (!t) return "";
-      // remove email if they paste it
       if (t.includes("@")) return "";
-      // take first line
       const first = t.split("\n")[0].trim();
       if (first.length < 2) return "";
+      // reject if looks like a question
+      if (/[?]$/.test(first)) return "";
       return first.slice(0, 60);
     }
 
     function normalizeWant(text) {
       const t = String(text || "").trim();
       if (!t) return "";
-      // if they typed email while asked "want", ignore
       if (extractEmail(t)) return "";
       return t.slice(0, 160);
     }
 
     function getLeadSummary() {
-      const n = getSavedName();
-      const w = getSavedWant();
-      const e = getSavedEmail();
-      return { name: n, want: w, email: e };
+      return { name: getSavedName(), want: getSavedWant(), email: getSavedEmail() };
     }
 
-    // This runs on every send BEFORE calling server:
-    // - If email typed: save it + mark done
-    // - If stage = name: save name, ask "what do you want?"
-    // - If stage = want: save want, ask email
-    // - If stage = email: save email, thank you + proceed
+    // Local lead flow BEFORE server
     function handleLeadFlowBeforeServer(userText) {
       const text = String(userText || "").trim();
       if (!text) return { handled: false };
 
-      // If user typed an email anytime, capture it
       const emailInText = extractEmail(text);
       if (isValidEmail(emailInText)) {
         saveEmail(emailInText);
@@ -416,7 +417,7 @@
             `✅ Thanks${name ? `, ${name}` : ""}! I saved your email (${email}).` +
             (want ? `\n\n📌 You need: ${want}` : "") +
             `\n\nHow can I help next? (pricing / website / chatbot / booking)`,
-          allowServer: true, // still send to server so it saves in DB
+          allowServer: true,
         };
       }
 
@@ -430,10 +431,9 @@
           return {
             handled: true,
             botMessage: `Nice to meet you, ${name}! ✅ What do you want right now?\n(website / chatbot / ads / booking / automation)`,
-            allowServer: true, // still send so DB has message too
+            allowServer: true,
           };
         }
-        // if they didn't type a name, don't block
         return { handled: false };
       }
 
@@ -452,75 +452,80 @@
       }
 
       if (stage === "email") {
-        // They didn't type email -> remind once
         return {
           handled: true,
           botMessage: `Almost done ✅ Please type your email (example: name@gmail.com).`,
-          allowServer: false, // don't spam server when we only need email
+          allowServer: false,
         };
       }
 
-      // done
       return { handled: false };
     }
 
     // =========================
-    // Send
+    // Server call (centralized) ✅ saves sessionId from response
+    // =========================
+    let isSending = false;
+
+    async function callServer(userText, { silent = false } = {}) {
+      const lead = getLeadSummary();
+
+      const body = {
+        message: String(userText || "").trim(),
+        sessionId,
+        source: "widget",
+        clientId: CLIENT_ID,
+        ...(lead.email ? { email: lead.email } : {}),
+      };
+
+      const r = await fetchWithTimeout(
+        CHAT_URL,
+        {
+          method: "POST",
+          credentials: FETCH_CREDENTIALS,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        15000
+      );
+
+      const j = await r.json().catch(() => ({}));
+
+      // ✅ IMPORTANT: store sessionId returned by server
+      if (j && j.sessionId) {
+        saveSessionId(j.sessionId);
+      }
+
+      if (!r.ok) {
+        if (!silent) addMsg(j?.reply || j?.error || `Request failed (${r.status})`, "bot");
+        return { ok: false, data: j };
+      }
+
+      if (!silent && j?.reply) return { ok: true, data: j };
+      return { ok: true, data: j };
+    }
+
+    // =========================
+    // Send (UI)
     // =========================
     async function send(message) {
       const text = String(message || "").trim();
-      if (!text) return;
+      if (!text || isSending) return;
 
-      addMsg(text, "me");
-
-      // Lead flow local handler
-      const leadFlow = handleLeadFlowBeforeServer(text);
-      if (leadFlow.handled && leadFlow.botMessage) {
-        addMsg(leadFlow.botMessage, "bot");
-      }
-
-      // Only send to server when allowed
-      if (leadFlow.handled && leadFlow.allowServer === false) return;
-
-      // send saved lead data to server too
-      const lead = getLeadSummary();
-
+      isSending = true;
       try {
-        const r = await fetchWithTimeout(
-          CHAT_URL,
-          {
-            method: "POST",
-            credentials: FETCH_CREDENTIALS,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message: text,
-              sessionId,
-              source: "widget",
-              clientId: CLIENT_ID,
-              // send lead fields (server can store them if you add columns)
-              ...(lead.email ? { email: lead.email } : {}),
-              ...(lead.name ? { name: lead.name } : {}),
-              ...(lead.want ? { want: lead.want } : {}),
-            }),
-          },
-          15000
-        );
+        addMsg(text, "me");
 
-        const j = await r.json().catch(() => ({}));
+        const leadFlow = handleLeadFlowBeforeServer(text);
+        if (leadFlow.handled && leadFlow.botMessage) addMsg(leadFlow.botMessage, "bot");
+        if (leadFlow.handled && leadFlow.allowServer === false) return;
 
-        if (!r.ok) {
-          addMsg(j?.reply || j?.error || `Request failed (${r.status})`, "bot");
-          return;
-        }
+        const { ok, data } = await callServer(text);
 
-        // If leadFlow already printed a bot message, we can still show server reply,
-        // but avoid double spam when stage is collecting.
+        // avoid overwhelming during capture
         const stage = getStage();
-        const serverReply = String(j.reply || "").trim();
-
-        // If we are in name/want/email stages and server replies generic,
-        // don't overwhelm. Show it only if it looks useful.
-        if (serverReply) {
+        const serverReply = String(data?.reply || "").trim();
+        if (ok && serverReply) {
           const inCapture = stage !== "done";
           const looksUseful = serverReply.length > 25 || /price|pricing|book|appointment|website|chatbot/i.test(serverReply);
           if (!inCapture || looksUseful) addMsg(serverReply, "bot");
@@ -530,6 +535,8 @@
           "I’m currently offline, but I can still help.\nTell me your business type and what you want (leads, sales, booking, or automation).",
           "bot"
         );
+      } finally {
+        isSending = false;
       }
     }
 
@@ -593,16 +600,17 @@
           );
           setStage("done");
         } else {
-          // Start lead flow gently
           if (stage === "name") addMsg(`Hi, I’m ${BRAND}. ✅ What’s your name?`, "bot");
           else if (stage === "want") addMsg(`Hi${savedName ? ` ${savedName}` : ""}! What do you want right now?`, "bot");
           else if (stage === "email") addMsg(`Great ✅ What’s your email so I can send pricing + next steps?`, "bot");
           else addMsg(`Hi, I’m ${BRAND}. Tell me your business type + your goal.`, "bot");
         }
+
+        // ✅ also sync server once when opened (silent)
+        callServer("Widget opened (silent sync).", { silent: true }).catch(() => {});
       }
     });
 
-    const closeBtn = $(".ssk-close");
     if (closeBtn) closeBtn.addEventListener("click", () => box.classList.remove("open"));
 
     box.querySelectorAll(".ssk-tab").forEach((b) => {
@@ -612,7 +620,6 @@
       });
     });
 
-    const sendBtn = $(".ssk-send");
     if (sendBtn) {
       sendBtn.addEventListener("click", () => {
         const m = (input.value || "").trim();
@@ -624,7 +631,8 @@
 
     if (input) {
       input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault(); // ✅ stops double firing on some sites
           const m = (input.value || "").trim();
           if (!m) return;
           input.value = "";
@@ -634,7 +642,7 @@
     }
 
     box.querySelectorAll(".ssk-chip").forEach((chip) => {
-      chip.addEventListener("click", () => {
+      chip.addEventListener("click", async () => {
         const a = chip.dataset.action;
 
         if (a === "book") {
@@ -666,8 +674,8 @@
           setStage("done");
           addMsg(`✅ Thanks! I saved your email (${cleaned}). What do you want help with next?`, "bot");
 
-          // still notify server
-          send("Please save my email for follow-up.");
+          // ✅ Silent server sync (no extra visible spam)
+          await callServer("User saved email via button.", { silent: true }).catch(() => {});
         }
       });
     });

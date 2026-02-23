@@ -1,10 +1,12 @@
 /**
- * ✅ SnowSkyeAI server.js (SELLABLE + CORS FIX + LEAD FLOW + MULTI-CLIENT)
+ * ✅ Skyesnow AI server.js (SELLABLE + NO-LOOP LEAD FLOW + MULTI-CLIENT + CORS FIX)
  *
- * Fixes:
- * ✅ CORS + OPTIONS preflight (so widget can call API from static site)
- * ✅ Lead flow: Name → Goal → Email → Thank you
- * ✅ Save ONE lead per session via Supabase UPSERT (no spam rows)
+ * Fixes & Upgrades:
+ * ✅ No more looping on "What's your name?"
+ * ✅ Proper state machine: ASK_NAME → ASK_GOAL → ASK_EMAIL → DONE
+ * ✅ Email only completes lead at correct stage (prevents DONE-before-name)
+ * ✅ Auto sessionId generation + returns sessionId to widget if missing
+ * ✅ One lead per session via Supabase UPSERT (no spam rows)
  * ✅ Multi-tenant via clientId
  * ✅ widget.js served with correct MIME
  * ✅ /api/public/recent?clientId=...
@@ -22,6 +24,7 @@ const bcrypt = require("bcrypt");
 const validator = require("validator");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 const { createClient } = require("@supabase/supabase-js");
 const OpenAI = require("openai");
@@ -82,7 +85,7 @@ app.set("trust proxy", 1);
 app.use(
   helmet({
     contentSecurityPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" }, // allow widget/logo across domains
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
@@ -95,17 +98,15 @@ app.use(express.urlencoded({ extended: true, limit: "300kb" }));
 ========================= */
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 900, standardHeaders: true, legacyHeaders: false });
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 25, standardHeaders: true, legacyHeaders: false });
-const chatLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false }); // a bit higher
-const leadLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
-
+const chatLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
 app.use(globalLimiter);
 
 /* =========================
-   CORS (PUBLIC + ADMIN) ✅ FIXED
+   CORS ✅ FIXED
 ========================= */
 function allowOrigin(origin) {
-  if (!origin) return true; // server-to-server
-  if (!LOCK_CORS) return true; // SELL MODE: allow all
+  if (!origin) return true;
+  if (!LOCK_CORS) return true;
   return allowedOrigins.includes(origin);
 }
 
@@ -123,10 +124,9 @@ const adminCors = cors({
   allowedHeaders: ["Content-Type"],
 });
 
-// ✅ MUST: preflight support
 app.options("*", publicCors);
 
-/* ✅ CORS error handler so widget gets JSON */
+// CORS JSON error handler
 app.use((err, req, res, next) => {
   if (err && String(err.message || "").includes("CORS")) {
     return res.status(403).json({ ok: false, reply: "Blocked by CORS. Add this domain to allowed origins." });
@@ -139,7 +139,7 @@ app.use((err, req, res, next) => {
 ========================= */
 app.use(
   session({
-    name: "snowskye.sid",
+    name: "skyesnow.sid",
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
@@ -160,15 +160,6 @@ app.get("/widget.js", (req, res) => {
 });
 
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
-
-app.get("/debug/public-files", (req, res) => {
-  try {
-    const files = fs.readdirSync(PUBLIC_DIR);
-    res.json({ ok: true, publicDir: PUBLIC_DIR, files });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
 
 /* =========================
    HELPERS
@@ -197,31 +188,47 @@ function requireAuth(req, res, next) {
   if (!req.session?.user) return res.status(401).json({ ok: false, error: "Unauthorized" });
   next();
 }
-function looksLikeBookingIntent(message) {
-  const m = String(message || "").toLowerCase();
-  return m.includes("book") || m.includes("appointment") || m.includes("schedule") || m.includes("consult") || m.includes("call");
-}
+
 function extractEmailFromText(text) {
   const t = String(text || "");
   const match = t.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
   return match ? normalizeEmail(match[0]) : "";
 }
-function looksLikeLeadIntent(message) {
+
+function looksLikeBookingIntent(message) {
   const m = String(message || "").toLowerCase();
-  return (
-    looksLikeBookingIntent(m) ||
-    m.includes("price") ||
-    m.includes("pricing") ||
-    m.includes("how much") ||
-    m.includes("cost") ||
-    m.includes("package") ||
-    m.includes("quote") ||
-    m.includes("contact") ||
-    m.includes("email") ||
-    m.includes("call") ||
-    m.includes("website") ||
-    m.includes("chatbot")
-  );
+  return m.includes("book") || m.includes("appointment") || m.includes("schedule") || m.includes("consult") || m.includes("call");
+}
+
+function looksLikeQuestion(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return t.endsWith("?") || t.startsWith("what") || t.startsWith("how") || t.startsWith("why") || t.startsWith("can ");
+}
+
+// Basic name extraction: accepts "Chris", "I'm Chris", "my name is Chris Ian"
+function extractName(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  if (looksLikeQuestion(t)) return "";
+
+  const m =
+    t.match(/^(?:my name is|i am|i'm)\s+([a-zA-Z][a-zA-Z\s.'-]{1,40})$/i) ||
+    t.match(/^([a-zA-Z][a-zA-Z\s.'-]{1,40})$/);
+
+  if (!m) return "";
+  const candidate = m[1].trim().replace(/\s+/g, " ");
+
+  const bad = new Set(["yes", "no", "okay", "ok", "hi", "hello", "thanks", "thank you"]);
+  if (bad.has(candidate.toLowerCase())) return "";
+
+  // avoid too long
+  if (candidate.length > 50) return "";
+
+  return candidate;
+}
+
+function makeId() {
+  return crypto.randomBytes(12).toString("hex"); // 24 chars
 }
 
 /* =========================
@@ -230,8 +237,6 @@ function looksLikeLeadIntent(message) {
 function getClientId(req) {
   return cleanText(req.body?.clientId, 80) || cleanText(req.query?.clientId, 80) || "default";
 }
-
-// ✅ isolate memory per client+session
 function memKey(clientId, sessionId) {
   return `${clientId}::${sessionId}`;
 }
@@ -239,9 +244,15 @@ function memKey(clientId, sessionId) {
 /* =========================
    SESSION MEMORY + LEAD FLOW
 ========================= */
-// memory state per (clientId+sessionId):
-// { stage: "ASK_NAME" | "ASK_GOAL" | "ASK_EMAIL" | "DONE", name, goal, email, msgCount, thankedAt, history: [] }
+// { stage, name, goal, email, msgCount, thankedAt, history: [], lastSeenAt }
 const sessionMemory = new Map();
+const MEMORY_TTL_MS = 1000 * 60 * 60 * 24 * 2; // 48 hours
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessionMemory.entries()) {
+    if (!v?.lastSeenAt || now - v.lastSeenAt > MEMORY_TTL_MS) sessionMemory.delete(k);
+  }
+}, 1000 * 60 * 10).unref();
 
 function getMem(clientId, sessionId) {
   if (!clientId || !sessionId) return null;
@@ -250,7 +261,7 @@ function getMem(clientId, sessionId) {
 function setMem(clientId, sessionId, patch) {
   if (!clientId || !sessionId) return;
   const cur = getMem(clientId, sessionId) || {};
-  sessionMemory.set(memKey(clientId, sessionId), { ...cur, ...patch });
+  sessionMemory.set(memKey(clientId, sessionId), { ...cur, ...patch, lastSeenAt: Date.now() });
 }
 function bumpMsgCount(clientId, sessionId) {
   const cur = getMem(clientId, sessionId) || {};
@@ -258,7 +269,6 @@ function bumpMsgCount(clientId, sessionId) {
   setMem(clientId, sessionId, { msgCount: next });
   return next;
 }
-
 function pushHistory(clientId, sessionId, role, content, maxItems = 10) {
   const cur = getMem(clientId, sessionId) || {};
   const history = Array.isArray(cur.history) ? cur.history : [];
@@ -269,7 +279,6 @@ function getHistory(clientId, sessionId) {
   const cur = getMem(clientId, sessionId);
   return Array.isArray(cur?.history) ? cur.history : [];
 }
-
 function hasThanked(clientId, sessionId) {
   const cur = getMem(clientId, sessionId);
   return Boolean(cur?.thankedAt);
@@ -307,26 +316,29 @@ async function upsertLead({ clientId, sessionId, source, name, goal, email, last
 }
 
 /* =========================
-   AI PROMPT
+   AI PROMPT (does NOT re-ask name if already known)
 ========================= */
-function businessBrain(clientId, userMessage, history) {
+function businessBrain(clientId, mem, userMessage, history) {
   const prior = (history || [])
     .map((h) => `${h.role.toUpperCase()}: ${h.content}`)
     .join("\n")
     .slice(-4000);
 
+  const nameLine = mem?.name ? `User name: ${mem.name}` : "User name: (unknown)";
+  const goalLine = mem?.goal ? `User goal: ${mem.goal}` : "User goal: (unknown)";
+
   return `
-You are SnowSkyeAI's premium assistant.
+You are Skyesnow AI's premium assistant.
 
 Client/tenant: ${clientId}
+${nameLine}
+${goalLine}
 
-Be concise. Ask 1 question only.
-
-We are capturing lead in this order:
-1) name
-2) what they want
-3) email
-then say thank you.
+Rules:
+- Be concise.
+- Ask ONLY 1 question at a time.
+- If user name is known, DO NOT ask for name again.
+- Help them decide packages or book a consult.
 
 CONTEXT:
 ${prior || "(none)"}
@@ -339,13 +351,17 @@ ${userMessage}
 /* =========================
    FALLBACK
 ========================= */
-function fallbackReply(m) {
+function fallbackReply(m, mem) {
   const msg = String(m || "").toLowerCase();
+
   if (msg.includes("price") || msg.includes("pricing") || msg.includes("cost")) {
-    return "Pricing (one-time): Starter $100 (chatbot), Popular $300 (website+chatbot+lead automation), Premium $500 (full system). What’s your business type?";
+    return "Pricing (one-time): Starter $100 (chatbot), Popular $300 (website + chatbot + lead automation), Premium $500 (full system). What’s your business type?";
   }
   if (looksLikeBookingIntent(msg)) {
     return "Sure ✅ What date/time and timezone do you prefer for a consultation?";
+  }
+  if (mem?.goal) {
+    return `Got it. To help you with "${mem.goal}", what business are you in (clinic, real estate, agency, shop, etc.)?`;
   }
   return "Got it. What’s your business type and your main goal (leads, sales, booking, automation)?";
 }
@@ -437,7 +453,6 @@ app.get("/api/leads", adminCors, requireAuth, async (req, res) => {
 
 /* =========================
    PUBLIC RECENT (Activity tab)
-   GET /api/public/recent?clientId=buyer_001
 ========================= */
 app.get("/api/public/recent", publicCors, async (req, res) => {
   try {
@@ -481,80 +496,114 @@ app.get("/api/public/recent", publicCors, async (req, res) => {
 });
 
 /* =========================
-   CHAT ✅ Lead flow
+   CHAT ✅ NO-LOOP Lead Flow
 ========================= */
 app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
   const started = Date.now();
 
   try {
-    const message = cleanText(req.body?.message, 2000);
-    const source = cleanText(req.body?.source || "chat", 40);
-    const sessionId = cleanText(req.body?.sessionId, 120) || "";
     const clientId = getClientId(req);
+    const source = cleanText(req.body?.source || "chat", 40);
 
+    // ✅ sessionId: accept sessionId OR conversationId; generate if missing
+    let sessionId = cleanText(req.body?.sessionId, 120) || cleanText(req.body?.conversationId, 120) || "";
+    let issuedSessionId = "";
+    if (!sessionId) {
+      sessionId = makeId();
+      issuedSessionId = sessionId; // we will return this so widget can store it
+    }
+
+    const message = cleanText(req.body?.message, 2000);
     const msgErr = guardMessage(message);
-    if (msgErr) return res.status(400).json({ ok: false, reply: msgErr });
+    if (msgErr) return res.status(400).json({ ok: false, reply: msgErr, sessionId: issuedSessionId || sessionId });
 
-    const msgCount = bumpMsgCount(clientId, sessionId);
+    // init stage if absent
+    const cur0 = getMem(clientId, sessionId) || {};
+    if (!cur0.stage) setMem(clientId, sessionId, { stage: "ASK_NAME" });
 
-    // detect email
+    bumpMsgCount(clientId, sessionId);
+    pushHistory(clientId, sessionId, "user", message);
+
+    // detect email (from message or body)
     const emailFromBody = normalizeEmail(req.body?.email);
     const emailFromText = extractEmailFromText(message);
-    const foundEmail = isValidEmail(emailFromBody) ? emailFromBody : isValidEmail(emailFromText) ? emailFromText : "";
+    const foundEmail =
+      isValidEmail(emailFromBody) ? emailFromBody : isValidEmail(emailFromText) ? emailFromText : "";
 
-    // init stage
-    const cur = getMem(clientId, sessionId) || {};
-    if (!cur.stage) setMem(clientId, sessionId, { stage: "ASK_NAME" });
+    // read memory fresh
+    let mem = getMem(clientId, sessionId) || {};
+    let stage = mem.stage;
 
-    // keep history for AI
-    pushHistory(clientId, sessionId, "user", message);
+    // ✅ IMPORTANT FIX:
+    // If widget keeps sending email, don't force DONE unless we are ready
+    if (foundEmail) {
+      if ((mem.name && mem.goal) || stage === "ASK_EMAIL") {
+        setMem(clientId, sessionId, { email: foundEmail, stage: "DONE" });
+      } else {
+        // store email for later, but DO NOT complete lead yet
+        setMem(clientId, sessionId, { email: foundEmail });
+      }
+    }
+
+    // refresh memory after potential update
+    mem = getMem(clientId, sessionId) || {};
+    stage = mem.stage;
 
     let reply = "";
     let usedAI = false;
 
-    // ===== Lead flow (Name → Goal → Email) =====
-    const mem = getMem(clientId, sessionId) || {};
-    const stage = mem.stage;
-
-    // If they send email anytime
-    if (foundEmail) {
-      setMem(clientId, sessionId, { email: foundEmail, stage: "DONE" });
-    }
-
-    const afterEmailMem = getMem(clientId, sessionId) || {};
-
-    if (afterEmailMem.stage !== "DONE") {
-      if (stage === "ASK_NAME") {
-        // accept message as name if it's not clearly a question
-        setMem(clientId, sessionId, { name: message, stage: "ASK_GOAL" });
-        reply = `Nice to meet you, ${message}! 👋 What are you looking for today? (website, chatbot, booking, automation, or leads)`;
-      } else if (stage === "ASK_GOAL") {
-        setMem(clientId, sessionId, { goal: message, stage: "ASK_EMAIL" });
+    // ===== Lead flow (ASK_NAME → ASK_GOAL → ASK_EMAIL → DONE) =====
+    if (stage === "ASK_NAME") {
+      const name = extractName(message);
+      if (name) {
+        setMem(clientId, sessionId, { name, stage: "ASK_GOAL" });
+        reply = `Nice to meet you, ${name}! 👋 What are you looking for today? (website, chatbot, booking, automation, or leads)`;
+      } else {
+        reply = `Thanks! ✅ What’s your name?`;
+      }
+    } else if (stage === "ASK_GOAL") {
+      // If user pasted email instead of goal, handle it
+      if (foundEmail) {
+        // goal still missing -> ask goal, but keep email saved
+        reply = `Perfect ✅ What do you want to achieve? (more leads, bookings, sales, support automation)`;
+      } else {
+        const goal = cleanText(message, 300);
+        setMem(clientId, sessionId, { goal, stage: "ASK_EMAIL" });
         reply = `Got it ✅ What’s the best email to send details and pricing?`;
-      } else if (stage === "ASK_EMAIL") {
-        // if they didn’t send email, ask again gently
+      }
+    } else if (stage === "ASK_EMAIL") {
+      if (foundEmail) {
+        setMem(clientId, sessionId, { email: foundEmail, stage: "DONE" });
+        mem = getMem(clientId, sessionId) || {};
+        stage = mem.stage;
+      } else {
         reply = `No problem — please type your email like name@gmail.com so I can send the details.`;
       }
     }
 
-    // If DONE, thank + optionally AI
-    const doneMem = getMem(clientId, sessionId) || {};
-    if (doneMem.stage === "DONE") {
-      if (!doneMem.name) {
-        // edge case: they sent email first
+    // DONE behavior
+    mem = getMem(clientId, sessionId) || {};
+    if (mem.stage === "DONE") {
+      // Edge: email came first, but name missing
+      if (!mem.name) {
         setMem(clientId, sessionId, { stage: "ASK_NAME" });
         reply = `Thanks! ✅ What’s your name?`;
+      } else if (!mem.goal) {
+        setMem(clientId, sessionId, { stage: "ASK_GOAL" });
+        reply = `Thanks, ${mem.name}! ✅ What are you looking for today (website, chatbot, booking, automation, or leads)?`;
       } else if (!hasThanked(clientId, sessionId)) {
         markThanked(clientId, sessionId);
-        reply = `Thank you, ${doneMem.name}! ✅ I saved your details.\n\nDo you want:\n1) Pricing packages\n2) Book a consultation\n3) Quick setup plan`;
+        reply =
+          `Thank you, ${mem.name}! ✅ I saved your details.\n\nChoose one:\n1) Pricing packages\n2) Book a consultation\n3) Quick setup plan`;
       } else if (!reply) {
-        // normal chat after lead captured
+        // Normal chat after lead captured
         const history = getHistory(clientId, sessionId);
+
         if (openai) {
           try {
             const ai = await openai.responses.create({
               model: "gpt-4o-mini",
-              input: businessBrain(clientId, message, history),
+              input: businessBrain(clientId, mem, message, history),
               temperature: 0.7,
             });
             reply = ai.output_text || "";
@@ -563,33 +612,41 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
             console.error("openai error:", e?.message || e);
           }
         }
-        if (!reply) reply = fallbackReply(message);
+
+        if (!reply) reply = fallbackReply(message, mem);
       }
     }
 
     // Save/update ONE lead row
-    const finalMem = getMem(clientId, sessionId) || {};
+    mem = getMem(clientId, sessionId) || {};
     await upsertLead({
       clientId,
       sessionId,
       source,
-      name: finalMem.name || null,
-      goal: finalMem.goal || null,
-      email: finalMem.email || null,
+      name: mem.name || null,
+      goal: mem.goal || null,
+      email: mem.email || null,
       last_message: message,
     });
 
-    // booking -> appointments (optional)
+    // Booking -> appointments (optional)
     if (looksLikeBookingIntent(message) && supabase) {
       supabase
         .from("appointments")
-        .insert([{ client_id: clientId, email: finalMem.email || null, message, status: "pending" }])
+        .insert([{ client_id: clientId, email: mem.email || null, message, status: "pending" }])
         .catch((e) => console.error("appointments insert failed:", e?.message || e));
     }
 
     pushHistory(clientId, sessionId, "assistant", reply);
 
-    return res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started });
+    // ✅ return sessionId so widget can store it
+    return res.json({
+      ok: true,
+      reply,
+      ai: usedAI,
+      ms: Date.now() - started,
+      sessionId: issuedSessionId || sessionId,
+    });
   } catch (e) {
     console.error("chat fatal:", e?.message || e);
     return res.json({ ok: true, reply: "Hi! What’s your name? 🙂", ai: false });
@@ -616,7 +673,7 @@ app.get("*", (req, res) => {
    START
 ========================= */
 app.listen(PORT, () => {
-  console.log(`✅ SnowSkyeAI server running on port ${PORT} (${NODE_ENV})`);
+  console.log(`✅ Skyesnow AI server running on port ${PORT} (${NODE_ENV})`);
   console.log(`✅ API: /api/chat`);
   console.log(`✅ Widget: /widget.js`);
 });
