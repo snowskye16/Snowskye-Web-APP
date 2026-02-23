@@ -1,15 +1,17 @@
 /**
- * ✅ Skyesnow AI server.js (SELLABLE + NO-LOOP LEAD FLOW + MULTI-CLIENT + CORS FIX)
+ * ✅ Skyesnow AI server.js (FULL FIX + UPGRADED + SELLABLE)
  *
- * Fixes & Upgrades:
- * ✅ No more looping on "What's your name?"
- * ✅ Proper state machine: ASK_NAME → ASK_GOAL → ASK_EMAIL → DONE
- * ✅ Email only completes lead at correct stage (prevents DONE-before-name)
- * ✅ Auto sessionId generation + returns sessionId to widget if missing
+ * Based on YOUR code + fixes:
+ * ✅ Fix /chat alias properly (no 404) by using one shared handler
+ * ✅ No-loop lead flow: ASK_NAME → ASK_GOAL → ASK_EMAIL → DONE
+ * ✅ Email never forces DONE too early
+ * ✅ Always returns sessionId (widget stores it)
+ * ✅ Multi-tenant clientId
  * ✅ One lead per session via Supabase UPSERT (no spam rows)
- * ✅ Multi-tenant via clientId
- * ✅ widget.js served with correct MIME
+ * ✅ CORS + OPTIONS preflight fixed
+ * ✅ widget.js served with correct MIME + cache headers
  * ✅ /api/public/recent?clientId=...
+ * ✅ Memory TTL cleanup (48 hours)
  */
 
 require("dotenv").config();
@@ -105,8 +107,8 @@ app.use(globalLimiter);
    CORS ✅ FIXED
 ========================= */
 function allowOrigin(origin) {
-  if (!origin) return true;
-  if (!LOCK_CORS) return true;
+  if (!origin) return true; // server-to-server / curl
+  if (!LOCK_CORS) return true; // SELL MODE: allow all
   return allowedOrigins.includes(origin);
 }
 
@@ -124,9 +126,10 @@ const adminCors = cors({
   allowedHeaders: ["Content-Type"],
 });
 
+// ✅ Preflight support
 app.options("*", publicCors);
 
-// CORS JSON error handler
+// ✅ CORS JSON error handler
 app.use((err, req, res, next) => {
   if (err && String(err.message || "").includes("CORS")) {
     return res.status(403).json({ ok: false, reply: "Blocked by CORS. Add this domain to allowed origins." });
@@ -205,7 +208,7 @@ function looksLikeQuestion(text) {
   return t.endsWith("?") || t.startsWith("what") || t.startsWith("how") || t.startsWith("why") || t.startsWith("can ");
 }
 
-// Basic name extraction: accepts "Chris", "I'm Chris", "my name is Chris Ian"
+// Basic name extraction: "Chris", "I'm Chris", "my name is Chris Ian"
 function extractName(text) {
   const t = String(text || "").trim();
   if (!t) return "";
@@ -221,9 +224,7 @@ function extractName(text) {
   const bad = new Set(["yes", "no", "okay", "ok", "hi", "hello", "thanks", "thank you"]);
   if (bad.has(candidate.toLowerCase())) return "";
 
-  // avoid too long
   if (candidate.length > 50) return "";
-
   return candidate;
 }
 
@@ -244,9 +245,9 @@ function memKey(clientId, sessionId) {
 /* =========================
    SESSION MEMORY + LEAD FLOW
 ========================= */
-// { stage, name, goal, email, msgCount, thankedAt, history: [], lastSeenAt }
 const sessionMemory = new Map();
 const MEMORY_TTL_MS = 1000 * 60 * 60 * 24 * 2; // 48 hours
+
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of sessionMemory.entries()) {
@@ -316,7 +317,7 @@ async function upsertLead({ clientId, sessionId, source, name, goal, email, last
 }
 
 /* =========================
-   AI PROMPT (does NOT re-ask name if already known)
+   AI PROMPT
 ========================= */
 function businessBrain(clientId, mem, userMessage, history) {
   const prior = (history || [])
@@ -441,6 +442,7 @@ app.post("/api/logout", adminCors, (req, res) => req.session.destroy(() => res.j
 ========================= */
 app.get("/api/leads", adminCors, requireAuth, async (req, res) => {
   if (!supabase) return res.status(500).json({ ok: false, error: "Supabase not configured" });
+
   const { data, error } = await supabase
     .from("leads")
     .select("id,client_id,session_id,name,goal,email,last_message,source,updated_at,created_at")
@@ -496,9 +498,9 @@ app.get("/api/public/recent", publicCors, async (req, res) => {
 });
 
 /* =========================
-   CHAT ✅ NO-LOOP Lead Flow
+   CHAT HANDLER ✅ SHARED (fixes /chat 404)
 ========================= */
-app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
+async function chatHandler(req, res) {
   const started = Date.now();
 
   try {
@@ -507,15 +509,11 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
 
     // ✅ sessionId: accept sessionId OR conversationId; generate if missing
     let sessionId = cleanText(req.body?.sessionId, 120) || cleanText(req.body?.conversationId, 120) || "";
-    let issuedSessionId = "";
-    if (!sessionId) {
-      sessionId = makeId();
-      issuedSessionId = sessionId; // we will return this so widget can store it
-    }
+    if (!sessionId) sessionId = makeId(); // always generate if missing
 
     const message = cleanText(req.body?.message, 2000);
     const msgErr = guardMessage(message);
-    if (msgErr) return res.status(400).json({ ok: false, reply: msgErr, sessionId: issuedSessionId || sessionId });
+    if (msgErr) return res.status(400).json({ ok: false, reply: msgErr, sessionId });
 
     // init stage if absent
     const cur0 = getMem(clientId, sessionId) || {};
@@ -534,8 +532,7 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     let mem = getMem(clientId, sessionId) || {};
     let stage = mem.stage;
 
-    // ✅ IMPORTANT FIX:
-    // If widget keeps sending email, don't force DONE unless we are ready
+    // ✅ IMPORTANT: email never forces DONE too early
     if (foundEmail) {
       if ((mem.name && mem.goal) || stage === "ASK_EMAIL") {
         setMem(clientId, sessionId, { email: foundEmail, stage: "DONE" });
@@ -545,7 +542,7 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
       }
     }
 
-    // refresh memory after potential update
+    // refresh memory
     mem = getMem(clientId, sessionId) || {};
     stage = mem.stage;
 
@@ -562,9 +559,7 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
         reply = `Thanks! ✅ What’s your name?`;
       }
     } else if (stage === "ASK_GOAL") {
-      // If user pasted email instead of goal, handle it
       if (foundEmail) {
-        // goal still missing -> ask goal, but keep email saved
         reply = `Perfect ✅ What do you want to achieve? (more leads, bookings, sales, support automation)`;
       } else {
         const goal = cleanText(message, 300);
@@ -584,7 +579,6 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
     // DONE behavior
     mem = getMem(clientId, sessionId) || {};
     if (mem.stage === "DONE") {
-      // Edge: email came first, but name missing
       if (!mem.name) {
         setMem(clientId, sessionId, { stage: "ASK_NAME" });
         reply = `Thanks! ✅ What’s your name?`;
@@ -596,7 +590,6 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
         reply =
           `Thank you, ${mem.name}! ✅ I saved your details.\n\nChoose one:\n1) Pricing packages\n2) Book a consultation\n3) Quick setup plan`;
       } else if (!reply) {
-        // Normal chat after lead captured
         const history = getHistory(clientId, sessionId);
 
         if (openai) {
@@ -639,25 +632,17 @@ app.post("/api/chat", publicCors, chatLimiter, async (req, res) => {
 
     pushHistory(clientId, sessionId, "assistant", reply);
 
-    // ✅ return sessionId so widget can store it
-    return res.json({
-      ok: true,
-      reply,
-      ai: usedAI,
-      ms: Date.now() - started,
-      sessionId: issuedSessionId || sessionId,
-    });
+    // ✅ Always return sessionId (widget stores it)
+    return res.json({ ok: true, reply, ai: usedAI, ms: Date.now() - started, sessionId });
   } catch (e) {
     console.error("chat fatal:", e?.message || e);
-    return res.json({ ok: true, reply: "Hi! What’s your name? 🙂", ai: false });
+    return res.json({ ok: true, reply: "Hi! What’s your name? 🙂", ai: false, sessionId: "" });
   }
-});
+}
 
-// alias
-app.post("/chat", publicCors, chatLimiter, (req, res, next) => {
-  req.url = "/api/chat";
-  next();
-});
+// ✅ Routes (REAL alias)
+app.post("/api/chat", publicCors, chatLimiter, chatHandler);
+app.post("/chat", publicCors, chatLimiter, chatHandler);
 
 /* =========================
    PAGES
@@ -674,6 +659,6 @@ app.get("*", (req, res) => {
 ========================= */
 app.listen(PORT, () => {
   console.log(`✅ Skyesnow AI server running on port ${PORT} (${NODE_ENV})`);
-  console.log(`✅ API: /api/chat`);
+  console.log(`✅ API: /api/chat (and /chat alias)`);
   console.log(`✅ Widget: /widget.js`);
 });
